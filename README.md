@@ -13,5 +13,7 @@ Gabrielle Olivia Handoko - 2168019
 Repository branches explained:
 
 main -> final product
+
 testing -> testing code before pushing to main
+
 app -> application code
