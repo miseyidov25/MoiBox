@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cproject storage_type_id="org.eclipse.cdt.core.XmlProjectDescriptionStorage">
+	<storageModule moduleId="org.eclipse.cdt.core.settings">
+		<cconfiguration id="org.eclipse.cdt.build.core.cfg_1">
+			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+				<project id="org.eclipse.cdt.build.core.buildArtefactType.exe" name="Executable" superClass="org.eclipse.cdt.build.core.buildArtefactType.exe">
+				</project>
+				<configuration id="org.eclipse.cdt.build.core.cfg_1" name="Default" artifactName="MoiBox">
+					<folderInfo id="org.eclipse.cdt.build.core.folderInfo.1." name="/" resourcePath="">
+						<toolChain id="org.eclipse.cdt.build.core.toolchain.gnu.cross.exe" name="Cross GCC" superClass="org.eclipse.cdt.build.core.toolchain.gnu.cross.exe"/>
+					</folderInfo>
+				</configuration>
+			</storageModule>
+		</cconfiguration>
+	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+	<storageModule moduleId="org.eclipse.cdt.core.pathentry">
+		<pathEntry kind="src" path=""/>
+	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets">
+		<buildTarget id="org.eclipse.cdt.build.makeTarget.all" name="all" path="" target="all"/>
+		<buildTarget id="org.eclipse.cdt.build.makeTarget.clean" name="clean" path="" target="clean"/>
+	</storageModule>
+</cproject>
