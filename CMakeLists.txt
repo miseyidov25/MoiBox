@@ -102,9 +102,9 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/config/arch/arm/CMSIS/Core/Include/m-profile/armv8m_mpu.h"
 "${ProjDirPath}/config/arch/arm/CMSIS/Core/Include/tz_context.h"
 # Add more library entries here
-"${ProjDirPath}/default_lib/serial/serial.c"
-"${ProjDirPath}/default_lib/serial/retarget.c"
-"${ProjDirPath}/default_lib/fifo/fifo.c"
+"${ProjDirPath}/serial/serial.c"
+"${ProjDirPath}/serial/retarget.c"
+"${ProjDirPath}/fifo/fifo.c"
 "${ProjDirPath}/HAL/hal.c"
 "${ProjDirPath}/HAL/Actuators/lock.c"
 "${ProjDirPath}/HAL/BT/bt.c"
@@ -132,10 +132,10 @@ target_include_directories(${MCUX_SDK_PROJECT_NAME} PRIVATE
     ${ProjDirPath}/config/devices/MCX/MCXA/periph
     ${ProjDirPath}/config/arch/arm/CMSIS/Core/Include
     ${ProjDirPath}/config/arch/arm/CMSIS/Core/Include/m-profile
-    ${ProjDirPath}/default_lib/board
-    ${ProjDirPath}/default_lib/leds
-    ${ProjDirPath}/default_lib/serial
-    ${ProjDirPath}/default_lib/fifo
+    ${ProjDirPath}/board
+    ${ProjDirPath}/leds
+    ${ProjDirPath}/serial
+    ${ProjDirPath}/fifo
     ${ProjDirPath}/headers
     ${ProjDirPath}/HAL
     ${ProjDirPath}/Puzzles
