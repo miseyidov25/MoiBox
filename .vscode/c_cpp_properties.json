@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "name": "MCXA153",
+            "includePath": [
+                "${workspaceFolder}",
+                "${workspaceFolder}/config",
+                "${workspaceFolder}/config/devices/MCX/MCXA/MCXA153",
+                "${workspaceFolder}/config/devices/MCX/MCXA/periph",
+                "${workspaceFolder}/config/arch/arm/CMSIS/Core/Include",
+                "${workspaceFolder}/config/arch/arm/CMSIS/Core/Include/m-profile",
+                "${workspaceFolder}/App",
+                "${workspaceFolder}/board",
+                "${workspaceFolder}/serial",
+                "${workspaceFolder}/fifo",
+                "${workspaceFolder}/HAL",
+                "${workspaceFolder}/HAL/Actuators",
+                "${workspaceFolder}/HAL/Audio",
+                "${workspaceFolder}/HAL/BT",
+                "${workspaceFolder}/HAL/Display",
+                "${workspaceFolder}/HAL/Input",
+                "${workspaceFolder}/Puzzles"
+            ],
+            "defines": [
+                "CPU_MCXA153VLH",
+                "MCXA153_SERIES",
+                "__STARTUP_CLEAR_BSS",
+                "DEBUG",
+                "MCUX_META_BUILD",
+                "MCUXPRESSO_SDK",
+                "SDK_DEBUGCONSOLE=1"
+            ],
+            "forcedInclude": [
+                "${workspaceFolder}/config/mcux_config.h",
+                "${workspaceFolder}/config/mcuxsdk_version.h"
+            ],
+            "compilerPath": "C:/Program Files/arm/bin/arm-none-eabi-gcc.exe",
+            "cStandard": "gnu99",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-arm"
+        }
+    ],
+    "version": 4
+}
