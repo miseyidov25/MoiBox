@@ -7,6 +7,7 @@
 #include "HAL/Display/oled.h"
 #include "HAL/Display/leds.h"
 #include "HAL/Actuators/lock.h"
+#include "HAL/Storage/logger.h"
 #include "Puzzles/puzzle_handler.h"
 
 static app_state_t state = STATE_BOOT;
@@ -58,26 +59,31 @@ static void show_waiting_for_location(void)
     {
         oled_display_string(0, 0, is_dutch() ? "Ga naar plek 1" : "Go to location 1");
         print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 1\r\n" : "\r\nFSM: Waiting for location 1\r\n");
+        logger_log("FSM", "Waiting for location 1");
     }
     else if (current_puzzle == PUZZLE_2)
     {
         oled_display_string(0, 0, is_dutch() ? "Ga naar plek 2" : "Go to location 2");
         print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 2\r\n" : "\r\nFSM: Waiting for location 2\r\n");
+        logger_log("FSM", "Waiting for location 2");
     }
     else if (current_puzzle == PUZZLE_3)
     {
         oled_display_string(0, 0, is_dutch() ? "Ga naar plek 3" : "Go to location 3");
         print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 3\r\n" : "\r\nFSM: Waiting for location 3\r\n");
+        logger_log("FSM", "Waiting for location 3");
     }
     else if (current_puzzle == PUZZLE_4)
     {
         oled_display_string(0, 0, is_dutch() ? "Ga naar plek 4" : "Go to location 4");
         print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 4\r\n" : "\r\nFSM: Waiting for location 4\r\n");
+        logger_log("FSM", "Waiting for location 4");
     }
     else if (current_puzzle == PUZZLE_5)
     {
         oled_display_string(0, 0, is_dutch() ? "Ga naar plek 5" : "Go to location 5");
         print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 5\r\n" : "\r\nFSM: Waiting for location 5\r\n");
+        logger_log("FSM", "Waiting for location 5");
     }
 }
 
@@ -89,6 +95,7 @@ static void handle_puzzle_solved(void)
     oled_display_string(0, 0, is_dutch() ? "Puzzel klaar!" : "Puzzle solved!");
 
     print_serial(is_dutch() ? "\r\nFSM: Puzzel opgelost\r\n" : "\r\nFSM: Puzzle solved\r\n");
+    logger_log("FSM", "Puzzle solved");
 
     if (current_puzzle == PUZZLE_5)
     {
@@ -98,6 +105,8 @@ static void handle_puzzle_solved(void)
         oled_display_string(0, 0, is_dutch() ? "Alles opgelost" : "All puzzles solved");
         oled_display_string(1, 0, is_dutch() ? "Openen..." : "Unlocking...");
 
+        logger_log("FSM", "All puzzles solved");
+
         lock_unlock();
 
         state = STATE_UNLOCKED;
@@ -106,6 +115,7 @@ static void handle_puzzle_solved(void)
         oled_display_string(0, 0, is_dutch() ? "DOOS OPEN" : "BOX UNLOCKED");
 
         print_serial(is_dutch() ? "\r\nFSM: Doos geopend\r\n" : "\r\nFSM: Box unlocked\r\n");
+        logger_log("FSM", "Box unlocked");
     }
     else
     {
@@ -128,9 +138,10 @@ void fsm_init(void)
     lock_lock();
 
     oled_clear();
-    oled_display_string(0, 0, is_dutch() ? "MOIBOX START" : "MOIBOX START");
+    oled_display_string(0, 0, "MOIBOX START");
 
     print_serial("\r\nFSM: Boot\r\n");
+    logger_log("FSM", "Boot");
 
     state = STATE_WAIT_FOR_LOCATION;
     show_waiting_for_location();
@@ -161,6 +172,7 @@ void fsm_handle_event(app_event_t event)
 
     if (event.type == EVENT_RESET_REQUEST)
     {
+        logger_log("FSM", "Reset");
         state = STATE_RESET;
         fsm_init();
         return;
@@ -173,6 +185,7 @@ void fsm_handle_event(app_event_t event)
 
         if (state == STATE_UNLOCKED)
         {
+            logger_log("FSM", "Beacon ignored because box already unlocked");
             return;
         }
 
@@ -182,6 +195,7 @@ void fsm_handle_event(app_event_t event)
             oled_display_string(0, 0, is_dutch() ? "Juiste plek" : "Correct location");
 
             print_serial(is_dutch() ? "\r\nFSM: Juiste plek gevonden\r\n" : "\r\nFSM: Correct location detected\r\n");
+            logger_log("FSM", "Correct location detected");
 
             puzzle_handler_start(current_puzzle);
             state = STATE_PUZZLE_ACTIVE;
@@ -193,6 +207,7 @@ void fsm_handle_event(app_event_t event)
             oled_display_string(1, 0, is_dutch() ? "Ga terug" : "Go back");
 
             print_serial(is_dutch() ? "\r\nFSM: Verkeerde plek\r\n" : "\r\nFSM: Wrong location detected\r\n");
+            logger_log("FSM", "Wrong location detected");
 
             state = STATE_WRONG_LOCATION;
         }

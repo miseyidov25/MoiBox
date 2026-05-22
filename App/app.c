@@ -12,8 +12,9 @@
 #include "HAL/Input/keypad.h"
 #include "HAL/Input/buttons.h"
 #include "HAL/BT/bt.h"
+#include "HAL/Storage/logger.h"
 
-static volatile uint32_t app_ms = 0u;
+volatile uint32_t ms = 0u;
 
 static void print_serial(const char *s)
 {
@@ -25,18 +26,19 @@ static void print_serial(const char *s)
 
 void app_tick_1ms(void)
 {
-    app_ms++;
+    ms++;
 }
 
 uint32_t app_millis(void)
 {
-    return app_ms;
+    return ms;
 }
 
 static void send_event(app_event_t event)
 {
     if (event.type != EVENT_NONE)
     {
+        logger_log_event(event_to_string(event.type));
         fsm_handle_event(event);
     }
 }
@@ -85,72 +87,51 @@ static void handle_serial_input(void)
         event.rssi = 0;
 
         print_rx_char(ch);
+        logger_log_input_char((char)ch);
 
-        /*
-         * Ignore line endings from serial monitor.
-         */
         if (ch == '\r' || ch == '\n')
         {
             continue;
         }
 
-        /*
-         * Runtime settings testing:
-         *
-         * E = easy difficulty
-         * H = hard difficulty
-         * P = English language
-         * D = Dutch language
-         * S = show current settings
-         */
         if (ch == 'E')
         {
             app_settings_set_difficulty(APP_DIFFICULTY_EASY);
             print_serial("Difficulty set to EASY\r\n");
+            logger_log_settings("Difficulty set to EASY");
             print_current_settings();
         }
         else if (ch == 'H')
         {
             app_settings_set_difficulty(APP_DIFFICULTY_HARD);
             print_serial("Difficulty set to HARD\r\n");
+            logger_log_settings("Difficulty set to HARD");
             print_current_settings();
         }
         else if (ch == 'P')
         {
             app_settings_set_language(APP_LANGUAGE_ENGLISH);
             print_serial("Language set to ENGLISH\r\n");
+            logger_log_settings("Language set to ENGLISH");
             print_current_settings();
         }
         else if (ch == 'D')
         {
             app_settings_set_language(APP_LANGUAGE_DUTCH);
             print_serial("Language set to DUTCH\r\n");
+            logger_log_settings("Language set to DUTCH");
             print_current_settings();
         }
         else if (ch == 'S')
         {
             print_current_settings();
+            logger_log_settings("Settings printed");
         }
-
-        /*
-         * Keypad fallback through serial monitor:
-         * 0-9, *, #
-         */
         else if ((ch >= '0' && ch <= '9') || ch == '*' || ch == '#')
         {
             event.type = EVENT_KEYPAD_KEY;
             event.keypad_key = (char)ch;
         }
-
-        /*
-         * Fake beacon/location events for testing:
-         *
-         * u = location 1
-         * n = location 2
-         * m = location 3
-         * j = location 4
-         * k = location 5
-         */
         else if (ch == 'u')
         {
             event.type = EVENT_BEACON_1_DETECTED;
@@ -171,15 +152,6 @@ static void handle_serial_input(void)
         {
             event.type = EVENT_BEACON_5_DETECTED;
         }
-
-        /*
-         * Fake colored button events for testing:
-         *
-         * r = red
-         * g = green
-         * b = blue
-         * y = yellow
-         */
         else if (ch == 'r')
         {
             event.type = EVENT_BUTTON_RED;
@@ -196,18 +168,15 @@ static void handle_serial_input(void)
         {
             event.type = EVENT_BUTTON_YELLOW;
         }
-
-        /*
-         * Reset test:
-         * x = reset
-         */
         else if (ch == 'x')
         {
+            logger_log("SYSTEM", "Reset requested");
             event.type = EVENT_RESET_REQUEST;
         }
         else
         {
             print_serial("Ignored serial input\r\n");
+            logger_log("INPUT", "Ignored serial input");
         }
 
         if (event.type != EVENT_NONE)
@@ -229,6 +198,7 @@ static void handle_keypad_input(void)
         event.keypad_key = key;
         event.rssi = 0;
 
+        logger_log_input_char(key);
         send_event(event);
     }
 #endif
@@ -284,24 +254,25 @@ void app_init(void)
 {
     serial_init(115200);
 
-    /*
-     * 48 MHz clock.
-     * 48000 cycles = 1 ms.
-     */
     SysTick_Config(48000u);
+    __enable_irq();
 
     app_settings_init();
 
     hal_init();
+
+    logger_init();
+    logger_log("SYSTEM", "MOIBOX boot");
+
     fsm_init();
 
     print_current_settings();
-
-    __enable_irq();
 }
 
 void app_update(void)
 {
+    logger_update(app_millis());
+
     hal_update(app_millis());
 
     handle_keypad_input();

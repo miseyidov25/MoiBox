@@ -136,7 +136,6 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/App/settings.c"
 "${ProjDirPath}/App/settings.h"
 
-
 # ============================================================
 # BOARD
 # ============================================================
@@ -146,7 +145,7 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/board/pins.h"
 
 # ============================================================
-# SERIAL
+# SERIAL / FIFO
 # ============================================================
 
 "${ProjDirPath}/serial/serial.c"
@@ -181,6 +180,30 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/HAL/Input/buttons.h"
 "${ProjDirPath}/HAL/Input/keypad.c"
 "${ProjDirPath}/HAL/Input/keypad.h"
+
+# ============================================================
+# HAL STORAGE / SD LOGGING
+# ============================================================
+
+"${ProjDirPath}/HAL/Storage/logger.c"
+"${ProjDirPath}/HAL/Storage/logger.h"
+
+# ============================================================
+# FATFS / SD CARD
+# ============================================================
+
+"${ProjDirPath}/FatFs/ff.c"
+"${ProjDirPath}/FatFs/ff.h"
+"${ProjDirPath}/FatFs/ffconf.h"
+
+"${ProjDirPath}/FatFs/diskio.c"
+"${ProjDirPath}/FatFs/diskio.h"
+
+"${ProjDirPath}/FatFs/lpspi_master.c"
+"${ProjDirPath}/FatFs/lpspi_master.h"
+
+"${ProjDirPath}/FatFs/fatfs_time.c"
+"${ProjDirPath}/FatFS/ffunicode.c"
 
 # ============================================================
 # PUZZLES
@@ -227,6 +250,9 @@ target_include_directories(${MCUX_SDK_PROJECT_NAME} PRIVATE
     ${ProjDirPath}/HAL/BT
     ${ProjDirPath}/HAL/Display
     ${ProjDirPath}/HAL/Input
+    ${ProjDirPath}/HAL/Storage
+
+    ${ProjDirPath}/FatFs
 
     ${ProjDirPath}/Puzzles
 )

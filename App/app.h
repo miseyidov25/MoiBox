@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+extern volatile uint32_t ms;
+
 void app_init(void);
 void app_update(void);
 
