@@ -133,7 +133,9 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/App/fsm.c"
 "${ProjDirPath}/App/fsm.h"
 
+"${ProjDirPath}/App/settings.c"
 "${ProjDirPath}/App/settings.h"
+
 
 # ============================================================
 # BOARD

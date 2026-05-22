@@ -6,7 +6,6 @@
 #include "App/fsm.h"
 #include "App/settings.h"
 
-
 #include "serial.h"
 
 #include "HAL/hal.h"
@@ -15,6 +14,14 @@
 #include "HAL/BT/bt.h"
 
 static volatile uint32_t app_ms = 0u;
+
+static void print_serial(const char *s)
+{
+    while (*s)
+    {
+        serial_putchar(*s++);
+    }
+}
 
 void app_tick_1ms(void)
 {
@@ -34,6 +41,37 @@ static void send_event(app_event_t event)
     }
 }
 
+static void print_rx_char(int ch)
+{
+    print_serial("\r\nRX: ");
+
+    if (ch == '\r')
+    {
+        print_serial("\\r");
+    }
+    else if (ch == '\n')
+    {
+        print_serial("\\n");
+    }
+    else
+    {
+        serial_putchar((char)ch);
+    }
+
+    print_serial("\r\n");
+}
+
+static void print_current_settings(void)
+{
+    print_serial("Difficulty: ");
+    print_serial(app_settings_difficulty_to_string(app_settings_get_difficulty()));
+    print_serial("\r\n");
+
+    print_serial("Language: ");
+    print_serial(app_settings_language_to_string(app_settings_get_language()));
+    print_serial("\r\n");
+}
+
 static void handle_serial_input(void)
 {
     app_event_t event;
@@ -46,25 +84,74 @@ static void handle_serial_input(void)
         event.keypad_key = '\0';
         event.rssi = 0;
 
+        print_rx_char(ch);
+
         /*
-         * Keypad fallback through serial monitor.
+         * Ignore line endings from serial monitor.
          */
-        if ((ch >= '0' && ch <= '9') || ch == '*' || ch == '#')
+        if (ch == '\r' || ch == '\n')
+        {
+            continue;
+        }
+
+        /*
+         * Runtime settings testing:
+         *
+         * E = easy difficulty
+         * H = hard difficulty
+         * P = English language
+         * D = Dutch language
+         * S = show current settings
+         */
+        if (ch == 'E')
+        {
+            app_settings_set_difficulty(APP_DIFFICULTY_EASY);
+            print_serial("Difficulty set to EASY\r\n");
+            print_current_settings();
+        }
+        else if (ch == 'H')
+        {
+            app_settings_set_difficulty(APP_DIFFICULTY_HARD);
+            print_serial("Difficulty set to HARD\r\n");
+            print_current_settings();
+        }
+        else if (ch == 'P')
+        {
+            app_settings_set_language(APP_LANGUAGE_ENGLISH);
+            print_serial("Language set to ENGLISH\r\n");
+            print_current_settings();
+        }
+        else if (ch == 'D')
+        {
+            app_settings_set_language(APP_LANGUAGE_DUTCH);
+            print_serial("Language set to DUTCH\r\n");
+            print_current_settings();
+        }
+        else if (ch == 'S')
+        {
+            print_current_settings();
+        }
+
+        /*
+         * Keypad fallback through serial monitor:
+         * 0-9, *, #
+         */
+        else if ((ch >= '0' && ch <= '9') || ch == '*' || ch == '#')
         {
             event.type = EVENT_KEYPAD_KEY;
             event.keypad_key = (char)ch;
         }
 
         /*
-         * Fake beacon/location events for testing.
+         * Fake beacon/location events for testing:
          *
-         * b = beacon 1
-         * n = beacon 2
-         * m = beacon 3
-         * j = beacon 4
-         * k = beacon 5
+         * u = location 1
+         * n = location 2
+         * m = location 3
+         * j = location 4
+         * k = location 5
          */
-        else if (ch == 'b')
+        else if (ch == 'u')
         {
             event.type = EVENT_BEACON_1_DETECTED;
         }
@@ -86,11 +173,11 @@ static void handle_serial_input(void)
         }
 
         /*
-         * Fake colored button events for testing.
+         * Fake colored button events for testing:
          *
          * r = red
          * g = green
-         * u = blue
+         * b = blue
          * y = yellow
          */
         else if (ch == 'r')
@@ -101,7 +188,7 @@ static void handle_serial_input(void)
         {
             event.type = EVENT_BUTTON_GREEN;
         }
-        else if (ch == 'u')
+        else if (ch == 'b')
         {
             event.type = EVENT_BUTTON_BLUE;
         }
@@ -111,14 +198,22 @@ static void handle_serial_input(void)
         }
 
         /*
-         * Reset test.
+         * Reset test:
+         * x = reset
          */
         else if (ch == 'x')
         {
             event.type = EVENT_RESET_REQUEST;
         }
+        else
+        {
+            print_serial("Ignored serial input\r\n");
+        }
 
-        send_event(event);
+        if (event.type != EVENT_NONE)
+        {
+            send_event(event);
+        }
     }
 }
 
@@ -195,8 +290,12 @@ void app_init(void)
      */
     SysTick_Config(48000u);
 
+    app_settings_init();
+
     hal_init();
     fsm_init();
+
+    print_current_settings();
 
     __enable_irq();
 }

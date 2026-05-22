@@ -5,11 +5,11 @@
 
 /*
  * Buzzer pin:
- * P3_5
+ * P2_7
  */
-#define BUZZER_GPIO GPIO3
-#define BUZZER_PORT PORT3
-#define BUZZER_PIN  5u
+#define BUZZER_GPIO GPIO2
+#define BUZZER_PORT PORT2
+#define BUZZER_PIN  7u
 
 #define DOT_MS        150u
 #define DASH_MS       450u
@@ -30,13 +30,17 @@ static void delay_ms_blocking(uint32_t ms)
 
 void buzzer_init(void)
 {
+    MRCC0->MRCC_GLB_CC0_SET =
+        MRCC_MRCC_GLB_CC0_PORT2(1);
+
     MRCC0->MRCC_GLB_CC1_SET =
-        MRCC_MRCC_GLB_CC1_PORT3(1) |
-        MRCC_MRCC_GLB_CC1_GPIO3(1);
+        MRCC_MRCC_GLB_CC1_GPIO2(1);
+
+    MRCC0->MRCC_GLB_RST0_SET =
+        MRCC_MRCC_GLB_RST0_PORT2(1);
 
     MRCC0->MRCC_GLB_RST1_SET =
-        MRCC_MRCC_GLB_RST1_PORT3(1) |
-        MRCC_MRCC_GLB_RST1_GPIO3(1);
+        MRCC_MRCC_GLB_RST1_GPIO2(1);
 
     BUZZER_PORT->PCR[BUZZER_PIN] = PORT_PCR_MUX(0);
 
