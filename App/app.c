@@ -24,6 +24,15 @@ static void print_serial(const char *s)
     }
 }
 
+/*
+ * This is needed because FatFs/diskio.c uses global ms for delays.
+ * Without this, logger_init() can freeze before the app prints anything.
+ */
+void SysTick_Handler(void)
+{
+    app_tick_1ms();
+}
+
 void app_tick_1ms(void)
 {
     ms++;
@@ -89,11 +98,23 @@ static void handle_serial_input(void)
         print_rx_char(ch);
         logger_log_input_char((char)ch);
 
+        /*
+         * Ignore line endings from serial monitor.
+         */
         if (ch == '\r' || ch == '\n')
         {
             continue;
         }
 
+        /*
+         * Runtime settings:
+         *
+         * E = easy difficulty
+         * H = hard difficulty
+         * P = English language
+         * D = Dutch language
+         * S = show current settings
+         */
         if (ch == 'E')
         {
             app_settings_set_difficulty(APP_DIFFICULTY_EASY);
@@ -127,11 +148,26 @@ static void handle_serial_input(void)
             print_current_settings();
             logger_log_settings("Settings printed");
         }
+
+        /*
+         * Keypad fallback through serial:
+         * 0-9, *, #
+         */
         else if ((ch >= '0' && ch <= '9') || ch == '*' || ch == '#')
         {
             event.type = EVENT_KEYPAD_KEY;
             event.keypad_key = (char)ch;
         }
+
+        /*
+         * Fake beacon/location events:
+         *
+         * u = location 1
+         * n = location 2
+         * m = location 3
+         * j = location 4
+         * k = location 5
+         */
         else if (ch == 'u')
         {
             event.type = EVENT_BEACON_1_DETECTED;
@@ -152,6 +188,15 @@ static void handle_serial_input(void)
         {
             event.type = EVENT_BEACON_5_DETECTED;
         }
+
+        /*
+         * Fake colored button events:
+         *
+         * r = red
+         * g = green
+         * b = blue
+         * y = yellow
+         */
         else if (ch == 'r')
         {
             event.type = EVENT_BUTTON_RED;
@@ -168,6 +213,11 @@ static void handle_serial_input(void)
         {
             event.type = EVENT_BUTTON_YELLOW;
         }
+
+        /*
+         * Reset:
+         * x = reset
+         */
         else if (ch == 'x')
         {
             logger_log("SYSTEM", "Reset requested");
@@ -254,19 +304,33 @@ void app_init(void)
 {
     serial_init(115200);
 
+    /*
+     * 48 MHz clock.
+     * 48000 cycles = 1 ms.
+     */
     SysTick_Config(48000u);
     __enable_irq();
+
+    print_serial("\r\nAPP: boot\r\n");
 
     app_settings_init();
 
     hal_init();
 
-    logger_init();
-    logger_log("SYSTEM", "MOIBOX boot");
-
+    /*
+     * Start the puzzle box BEFORE logger_init().
+     * This prevents a bad/missing SD card from stopping startup messages.
+     */
     fsm_init();
 
     print_current_settings();
+
+    /*
+     * SD logger starts after the app is already visibly running.
+     * If SD card is missing/broken, logger silently disables itself.
+     */
+    logger_init();
+    logger_log("SYSTEM", "MOIBOX boot");
 }
 
 void app_update(void)

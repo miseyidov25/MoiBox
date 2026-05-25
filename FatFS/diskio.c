@@ -1,8 +1,8 @@
 #include <MCXA153.h>
 
-#include "ff.h"
-#include "diskio.h"
-#include "lpspi_master.h"
+#include "FatFS/ff.h"
+#include "FatFS/diskio.h"
+#include "FatFS/lpspi_master.h"
 
 #define SD_CS_PIN 3u
 
@@ -104,7 +104,7 @@ static void deselect(void)
     rcvr_mmc(&d, 1);
 }
 
-static int select(void)
+static int select_card(void)
 {
     BYTE d;
 
@@ -179,31 +179,17 @@ static int xmit_datablock(const BYTE *buff, BYTE token)
     return 1;
 }
 
-static BYTE send_cmd(BYTE cmd, DWORD arg)
+static BYTE send_cmd_raw(BYTE cmd, DWORD arg)
 {
     BYTE n;
     BYTE d;
     BYTE buf[6];
 
-    if (cmd & 0x80)
+    deselect();
+
+    if (!select_card())
     {
-        cmd &= 0x7F;
-        n = send_cmd(CMD55, 0);
-
-        if (n > 1)
-        {
-            return n;
-        }
-    }
-
-    if (cmd != CMD12)
-    {
-        deselect();
-
-        if (!select())
-        {
-            return 0xFF;
-        }
+        return 0xFF;
     }
 
     buf[0] = 0x40 | cmd;
@@ -242,6 +228,29 @@ static BYTE send_cmd(BYTE cmd, DWORD arg)
     while ((d & 0x80) && --n);
 
     return d;
+}
+
+static BYTE send_cmd(BYTE cmd, DWORD arg)
+{
+    BYTE r;
+
+    if (cmd & 0x80)
+    {
+        cmd &= 0x7F;
+
+        r = send_cmd_raw(CMD55, 0);
+
+        if (r > 1)
+        {
+            return r;
+        }
+
+        deselect();
+
+        return send_cmd_raw(cmd, arg);
+    }
+
+    return send_cmd_raw(cmd, arg);
 }
 
 DSTATUS disk_status(BYTE drv)
@@ -301,7 +310,14 @@ DSTATUS disk_initialize(BYTE drv)
 
             if (buf[2] == 0x01 && buf[3] == 0xAA)
             {
-                for (tmr = 1000; tmr; tmr--)
+                r = send_cmd(CMD58, 0);
+
+                if (r == 0 || r == 1)
+                {
+                    rcvr_mmc(buf, 4);
+                }
+
+                for (tmr = 10000; tmr; tmr--)
                 {
                     r = send_cmd(ACMD41, 1UL << 30);
 
@@ -313,10 +329,42 @@ DSTATUS disk_initialize(BYTE drv)
                     dly_ms(1);
                 }
 
-                if (tmr && send_cmd(CMD58, 0) == 0)
+                if (tmr)
                 {
-                    rcvr_mmc(buf, 4);
-                    ty = (buf[0] & 0x40) ? (CT_SDC2 | CT_BLOCK) : CT_SDC2;
+                    r = send_cmd(CMD58, 0);
+
+                    if (r == 0)
+                    {
+                        rcvr_mmc(buf, 4);
+                        ty = (buf[0] & 0x40) ? (CT_SDC2 | CT_BLOCK) : CT_SDC2;
+                    }
+                }
+                else
+                {
+                    /*
+                     * Fallback for unusual cards.
+                     */
+                    for (tmr = 5000; tmr; tmr--)
+                    {
+                        r = send_cmd(CMD1, 0);
+
+                        if (r == 0)
+                        {
+                            break;
+                        }
+
+                        dly_ms(1);
+                    }
+
+                    if (tmr)
+                    {
+                        r = send_cmd(CMD16, 512);
+
+                        if (r == 0)
+                        {
+                            ty = CT_MMC3;
+                        }
+                    }
                 }
             }
         }
@@ -475,7 +523,7 @@ DRESULT disk_ioctl(BYTE drv, BYTE ctrl, void *buff)
     switch (ctrl)
     {
         case CTRL_SYNC:
-            if (select())
+            if (select_card())
             {
                 res = RES_OK;
             }

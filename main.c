@@ -1,4 +1,3 @@
-#include <MCXA153.h>
 #include "App/app.h"
 
 int main(void)
@@ -9,9 +8,4 @@ int main(void)
     {
         app_update();
     }
-}
-
-void SysTick_Handler(void)
-{
-    app_tick_1ms();
 }

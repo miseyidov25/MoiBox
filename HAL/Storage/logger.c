@@ -93,7 +93,7 @@ void logger_init(void)
     {
         /*
          * SD card not available.
-         * Logging is silently disabled.
+         * Logging disabled silently.
          */
         return;
     }

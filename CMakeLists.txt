@@ -175,6 +175,8 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/HAL/Display/leds.h"
 "${ProjDirPath}/HAL/Display/oled.c"
 "${ProjDirPath}/HAL/Display/oled.h"
+"${ProjDirPath}/HAL/Display/lpi2c.c"
+"${ProjDirPath}/HAL/Display/lpi2c.h"
 
 "${ProjDirPath}/HAL/Input/buttons.c"
 "${ProjDirPath}/HAL/Input/buttons.h"

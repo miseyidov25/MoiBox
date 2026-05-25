@@ -2,7 +2,6 @@
 #define BUTTONS_H
 
 #include <stdbool.h>
-#include <stdint.h>
 
 void buttons_init(void);
 void buttons_update(void);
@@ -14,6 +13,7 @@ bool buttons_yellow_pressed(void);
 
 /*
  * Compatibility with old button code.
+ * Returns true if any color button has a pending press.
  */
 bool buttons_is_pressed(void);
 
