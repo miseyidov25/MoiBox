@@ -1,183 +1,279 @@
-#include <MCXA153.h>
-#include <stdint.h>
-
 #include "HAL/Audio/buzzer.h"
 
+#include <MCXA153.h>
+#include <stdint.h>
+#include <stdbool.h>
+
 /*
- * Buzzer pin:
- * P2_7
+ * Set to 1 when buzzer pin is confirmed.
+ *
+ * While this is 0, the code compiles and puzzle logic works,
+ * but no real sound comes out.
  */
-#define BUZZER_GPIO GPIO2
-#define BUZZER_PORT PORT2
-#define BUZZER_PIN  7u
+#define BUZZER_ENABLED 0
 
-#define DOT_MS        150u
-#define DASH_MS       450u
-#define ELEM_GAP_MS   120u
-#define LETTER_GAP_MS 350u
-#define WORD_GAP_MS   700u
+/*
+ * Change to match the actual GPIO pin used for the buzzer.
+ * The current settings are for P3_5, which is the default on the A153
+ */
+#define BUZZER_GPIO GPIO3
+#define BUZZER_PORT PORT3
+#define BUZZER_PIN  5u
 
-static void delay_ms_blocking(uint32_t ms)
+static bool buzzer_active = false;
+static uint32_t buzzer_until_ms = 0u;
+
+static volatile uint32_t local_delay_counter;
+
+static void tiny_delay(uint32_t count)
 {
-    for (uint32_t m = 0; m < ms; m++)
+    local_delay_counter = count;
+
+    while (local_delay_counter > 0u)
     {
-        for (volatile uint32_t i = 0; i < 6000u; i++)
-        {
-            __NOP();
-        }
+        local_delay_counter--;
+    }
+}
+
+static void pause_short(void)
+{
+    tiny_delay(35000u);
+}
+
+static void pause_medium(void)
+{
+    tiny_delay(90000u);
+}
+
+static void pause_long(void)
+{
+    tiny_delay(180000u);
+}
+
+static void buzzer_pin_high(void)
+{
+#if BUZZER_ENABLED
+    BUZZER_GPIO->PSOR = (1u << BUZZER_PIN);
+#endif
+}
+
+static void buzzer_pin_low(void)
+{
+#if BUZZER_ENABLED
+    BUZZER_GPIO->PCOR = (1u << BUZZER_PIN);
+#endif
+}
+
+static void tone_blocking(uint32_t cycles, uint32_t half_period_delay)
+{
+#if BUZZER_ENABLED
+    for (uint32_t i = 0u; i < cycles; i++)
+    {
+        buzzer_pin_high();
+        tiny_delay(half_period_delay);
+        buzzer_pin_low();
+        tiny_delay(half_period_delay);
+    }
+#else
+    (void)cycles;
+    (void)half_period_delay;
+#endif
+}
+
+static void morse_dot(void)
+{
+    tone_blocking(70u, 500u);
+    pause_short();
+}
+
+static void morse_dash(void)
+{
+    tone_blocking(210u, 500u);
+    pause_short();
+}
+
+static void morse_gap_letter(void)
+{
+    pause_medium();
+}
+
+static void morse_gap_word(void)
+{
+    pause_long();
+}
+
+static char to_upper(char c)
+{
+    if ((c >= 'a') && (c <= 'z'))
+    {
+        return (char)(c - 'a' + 'A');
+    }
+
+    return c;
+}
+
+static const char *morse_for_char(char c)
+{
+    c = to_upper(c);
+
+    switch (c)
+    {
+        case 'A': return ".-";
+        case 'B': return "-...";
+        case 'C': return "-.-.";
+        case 'D': return "-..";
+        case 'E': return ".";
+        case 'F': return "..-.";
+        case 'G': return "--.";
+        case 'H': return "....";
+        case 'I': return "..";
+        case 'J': return ".---";
+        case 'K': return "-.-";
+        case 'L': return ".-..";
+        case 'M': return "--";
+        case 'N': return "-.";
+        case 'O': return "---";
+        case 'P': return ".--.";
+        case 'Q': return "--.-";
+        case 'R': return ".-.";
+        case 'S': return "...";
+        case 'T': return "-";
+        case 'U': return "..-";
+        case 'V': return "...-";
+        case 'W': return ".--";
+        case 'X': return "-..-";
+        case 'Y': return "-.--";
+        case 'Z': return "--..";
+
+        case '0': return "-----";
+        case '1': return ".----";
+        case '2': return "..---";
+        case '3': return "...--";
+        case '4': return "....-";
+        case '5': return ".....";
+        case '6': return "-....";
+        case '7': return "--...";
+        case '8': return "---..";
+        case '9': return "----.";
+
+        default:
+            return "";
     }
 }
 
 void buzzer_init(void)
 {
-    MRCC0->MRCC_GLB_CC0_SET =
-        MRCC_MRCC_GLB_CC0_PORT2(1);
+    buzzer_active = false;
+    buzzer_until_ms = 0u;
 
-    MRCC0->MRCC_GLB_CC1_SET =
-        MRCC_MRCC_GLB_CC1_GPIO2(1);
+#if BUZZER_ENABLED
+    /*
+     * Enable PORT3/GPIO3 if using P3_x.
+     * Change this if buzzer uses another port.
+     */
+    MRCC0->MRCC_GLB_CC1_SET |= MRCC_MRCC_GLB_CC1_PORT3(1);
+    MRCC0->MRCC_GLB_CC1_SET |= MRCC_MRCC_GLB_CC1_GPIO3(1);
 
-    MRCC0->MRCC_GLB_RST0_SET =
-        MRCC_MRCC_GLB_RST0_PORT2(1);
+    MRCC0->MRCC_GLB_RST1_SET |= MRCC_MRCC_GLB_RST1_PORT3(1);
+    MRCC0->MRCC_GLB_RST1_SET |= MRCC_MRCC_GLB_RST1_GPIO3(1);
 
-    MRCC0->MRCC_GLB_RST1_SET =
-        MRCC_MRCC_GLB_RST1_GPIO2(1);
+    BUZZER_PORT->PCR[BUZZER_PIN] =
+        PORT_PCR_MUX(0) |
+        PORT_PCR_IBE(1);
 
-    BUZZER_PORT->PCR[BUZZER_PIN] = PORT_PCR_MUX(0);
-
-    BUZZER_GPIO->PCOR = (1u << BUZZER_PIN);
     BUZZER_GPIO->PDDR |= (1u << BUZZER_PIN);
+    buzzer_pin_low();
+#endif
+}
+
+void buzzer_update(uint32_t current_ms)
+{
+    if (buzzer_active && (current_ms >= buzzer_until_ms))
+    {
+        buzzer_off();
+    }
 }
 
 void buzzer_on(void)
 {
-    BUZZER_GPIO->PSOR = (1u << BUZZER_PIN);
+    buzzer_active = true;
+    buzzer_pin_high();
 }
 
 void buzzer_off(void)
 {
-    BUZZER_GPIO->PCOR = (1u << BUZZER_PIN);
+    buzzer_active = false;
+    buzzer_pin_low();
 }
 
 void buzzer_beep(uint32_t duration_ms)
 {
-    buzzer_on();
-    delay_ms_blocking(duration_ms);
-    buzzer_off();
+    extern volatile uint32_t ms;
+
+    buzzer_active = true;
+    buzzer_until_ms = ms + duration_ms;
+    buzzer_pin_high();
 }
 
-void buzzer_dot(void)
+void buzzer_correct_sound(void)
 {
-    buzzer_beep(DOT_MS);
-    delay_ms_blocking(ELEM_GAP_MS);
+
+    tone_blocking(80u, 600u);
+    pause_short();
+    tone_blocking(120u, 350u);
 }
 
-void buzzer_dash(void)
+void buzzer_error_sound(void)
 {
-    buzzer_beep(DASH_MS);
-    delay_ms_blocking(ELEM_GAP_MS);
-}
 
-static void morse_pattern(const char *pattern)
-{
-    while (*pattern)
-    {
-        if (*pattern == '.')
-        {
-            buzzer_dot();
-        }
-        else if (*pattern == '-')
-        {
-            buzzer_dash();
-        }
-
-        pattern++;
-    }
-
-    delay_ms_blocking(LETTER_GAP_MS);
-}
-
-void buzzer_morse_char(char c)
-{
-    if (c >= 'a' && c <= 'z')
-    {
-        c = (char)(c - 'a' + 'A');
-    }
-
-    switch (c)
-    {
-        case 'A': morse_pattern(".-"); break;
-        case 'B': morse_pattern("-..."); break;
-        case 'C': morse_pattern("-.-."); break;
-        case 'D': morse_pattern("-.."); break;
-        case 'E': morse_pattern("."); break;
-        case 'F': morse_pattern("..-."); break;
-        case 'G': morse_pattern("--."); break;
-        case 'H': morse_pattern("...."); break;
-        case 'I': morse_pattern(".."); break;
-        case 'J': morse_pattern(".---"); break;
-        case 'K': morse_pattern("-.-"); break;
-        case 'L': morse_pattern(".-.."); break;
-        case 'M': morse_pattern("--"); break;
-        case 'N': morse_pattern("-."); break;
-        case 'O': morse_pattern("---"); break;
-        case 'P': morse_pattern(".--."); break;
-        case 'Q': morse_pattern("--.-"); break;
-        case 'R': morse_pattern(".-."); break;
-        case 'S': morse_pattern("..."); break;
-        case 'T': morse_pattern("-"); break;
-        case 'U': morse_pattern("..-"); break;
-        case 'V': morse_pattern("...-"); break;
-        case 'W': morse_pattern(".--"); break;
-        case 'X': morse_pattern("-..-"); break;
-        case 'Y': morse_pattern("-.--"); break;
-        case 'Z': morse_pattern("--.."); break;
-
-        case '0': morse_pattern("-----"); break;
-        case '1': morse_pattern(".----"); break;
-        case '2': morse_pattern("..---"); break;
-        case '3': morse_pattern("...--"); break;
-        case '4': morse_pattern("....-"); break;
-        case '5': morse_pattern("....."); break;
-        case '6': morse_pattern("-...."); break;
-        case '7': morse_pattern("--..."); break;
-        case '8': morse_pattern("---.."); break;
-        case '9': morse_pattern("----."); break;
-
-        case ' ':
-            delay_ms_blocking(WORD_GAP_MS);
-            break;
-
-        default:
-            break;
-    }
-}
-
-void buzzer_morse_string(const char *text)
-{
-    while (*text)
-    {
-        buzzer_morse_char(*text);
-        text++;
-    }
+    tone_blocking(180u, 1000u);
 }
 
 void buzzer_success(void)
 {
-    buzzer_beep(80u);
-    delay_ms_blocking(60u);
-    buzzer_beep(80u);
-    delay_ms_blocking(60u);
-    buzzer_beep(220u);
+    buzzer_correct_sound();
 }
 
 void buzzer_fail(void)
 {
-    buzzer_beep(300u);
-    delay_ms_blocking(100u);
-    buzzer_beep(300u);
+    buzzer_error_sound();
 }
 
-void buzzer_click(void)
+void buzzer_morse_string(const char *text)
 {
-    buzzer_beep(50u);
+    if (text == 0)
+    {
+        return;
+    }
+
+    while (*text != '\0')
+    {
+        char c = *text;
+
+        if (c == ' ')
+        {
+            morse_gap_word();
+            text++;
+            continue;
+        }
+
+        const char *pattern = morse_for_char(c);
+
+        while (*pattern != '\0')
+        {
+            if (*pattern == '.')
+            {
+                morse_dot();
+            }
+            else if (*pattern == '-')
+            {
+                morse_dash();
+            }
+
+            pattern++;
+        }
+
+        morse_gap_letter();
+        text++;
+    }
 }

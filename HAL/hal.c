@@ -23,6 +23,8 @@ void hal_update(uint32_t current_ms)
 {
     keypad_update(current_ms);
     buttons_update();
+    buzzer_update(current_ms);
+    leds_update(current_ms);
     bt_update();
     lock_update(current_ms);
 }

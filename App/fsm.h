@@ -13,4 +13,8 @@ app_state_t fsm_get_state(void);
 puzzle_id_t fsm_get_current_puzzle(void);
 bool fsm_is_puzzle_solved(puzzle_id_t puzzle);
 
+void fsm_set_puzzle_for_location(uint8_t location_number, puzzle_id_t puzzle);
+puzzle_id_t fsm_get_puzzle_for_location(uint8_t location_number);
+uint8_t fsm_get_current_location(void);
+
 #endif

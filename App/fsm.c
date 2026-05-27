@@ -4,14 +4,62 @@
 #include "App/settings.h"
 
 #include "serial.h"
+
 #include "HAL/Display/oled.h"
 #include "HAL/Display/leds.h"
 #include "HAL/Actuators/lock.h"
+#include "HAL/Audio/buzzer.h"
+#include "HAL/BT/bt.h"
 #include "HAL/Storage/logger.h"
+
 #include "Puzzles/puzzle_handler.h"
 
 static app_state_t state = STATE_BOOT;
+
+/*
+ * Current route location, 1..5.
+ * This is separate from the puzzle ID.
+ */
+static uint8_t current_location = 1u;
+
+/*
+ * The puzzle currently assigned to the current location.
+ */
 static puzzle_id_t current_puzzle = PUZZLE_1;
+
+/*
+ * This table makes puzzle assignment configurable.
+ *
+ * Default:
+ * Location 1 -> Puzzle 1
+ * Location 2 -> Puzzle 2
+ * Location 3 -> Puzzle 3
+ * Location 4 -> Puzzle 4
+ * Location 5 -> Puzzle 5
+ *
+ * Later the app can change it, for example:
+ * fsm_set_puzzle_for_location(1, PUZZLE_5);
+ */
+static puzzle_id_t puzzle_for_location[5] =
+{
+    PUZZLE_1,
+    PUZZLE_2,
+    PUZZLE_3,
+    PUZZLE_4,
+    PUZZLE_5
+};
+
+/*
+ * Completed locations are used for map LEDs.
+ */
+static bool location_completed[5] =
+{
+    false, false, false, false, false
+};
+
+/*
+ * Solved puzzles are still tracked separately.
+ */
 static bool puzzle_solved[PUZZLE_COUNT];
 
 static void print_serial(const char *s)
@@ -27,129 +75,282 @@ static int is_dutch(void)
     return app_settings_get_language() == APP_LANGUAGE_DUTCH;
 }
 
-static puzzle_id_t beacon_event_to_puzzle(app_event_type_t event_type)
+static void sync_current_puzzle_from_location(void)
+{
+    if ((current_location < 1u) || (current_location > 5u))
+    {
+        current_location = 1u;
+    }
+
+    current_puzzle = puzzle_for_location[current_location - 1u];
+}
+
+static uint8_t beacon_event_to_location(app_event_type_t event_type)
 {
     switch (event_type)
     {
         case EVENT_BEACON_1_DETECTED:
-            return PUZZLE_1;
+            return 1u;
 
         case EVENT_BEACON_2_DETECTED:
-            return PUZZLE_2;
+            return 2u;
 
         case EVENT_BEACON_3_DETECTED:
-            return PUZZLE_3;
+            return 3u;
 
         case EVENT_BEACON_4_DETECTED:
-            return PUZZLE_4;
+            return 4u;
 
         case EVENT_BEACON_5_DETECTED:
-            return PUZZLE_5;
+            return 5u;
 
         default:
-            return PUZZLE_COUNT;
+            return 0u;
     }
+}
+
+static void print_uint(uint32_t value)
+{
+    char buffer[12];
+    int index = 0;
+
+    if (value == 0u)
+    {
+        serial_putchar('0');
+        return;
+    }
+
+    while ((value > 0u) && (index < 11))
+    {
+        buffer[index++] = (char)('0' + (value % 10u));
+        value /= 10u;
+    }
+
+    while (index > 0)
+    {
+        serial_putchar(buffer[--index]);
+    }
+}
+
+static void oled_show_look_for_current_location(void)
+{
+    oled_clear();
+
+    if (is_dutch())
+    {
+        oled_display_string(0, 0, "ZOEK LOCATIE");
+    }
+    else
+    {
+        oled_display_string(0, 0, "LOOK FOR LOC");
+    }
+
+    oled_display_value(1, 0, current_location);
 }
 
 static void show_waiting_for_location(void)
 {
+    sync_current_puzzle_from_location();
+
+    state = STATE_WAIT_FOR_LOCATION;
+
+    bt_set_scanning_enabled(true);
+
+    leds_set_active_puzzle(current_location);
+    leds_update_map(current_location, location_completed);
+
+    oled_show_look_for_current_location();
+
+    if (is_dutch())
+    {
+        print_serial("\r\nFSM: Zoek locatie ");
+    }
+    else
+    {
+        print_serial("\r\nFSM: Looking for location ");
+    }
+
+    print_uint(current_location);
+    print_serial("\r\n");
+
+    logger_log("FSM", "Waiting for next location");
+}
+
+static void show_wrong_location(uint8_t detected_location)
+{
     oled_clear();
 
-    if (current_puzzle == PUZZLE_1)
+    if (is_dutch())
     {
-        oled_display_string(0, 0, is_dutch() ? "Ga naar plek 1" : "Go to location 1");
-        print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 1\r\n" : "\r\nFSM: Waiting for location 1\r\n");
-        logger_log("FSM", "Waiting for location 1");
+        oled_display_string(0, 0, "VERKEERDE PLEK");
+        oled_display_string(1, 0, "JE BENT BIJ");
+        oled_display_string(2, 0, "LOCATIE");
+        oled_display_value(2, 8, detected_location);
+        oled_display_string(3, 0, "ZOEK LOC");
+        oled_display_value(3, 8, current_location);
     }
-    else if (current_puzzle == PUZZLE_2)
+    else
     {
-        oled_display_string(0, 0, is_dutch() ? "Ga naar plek 2" : "Go to location 2");
-        print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 2\r\n" : "\r\nFSM: Waiting for location 2\r\n");
-        logger_log("FSM", "Waiting for location 2");
+        oled_display_string(0, 0, "WRONG LOCATION");
+        oled_display_string(1, 0, "YOU ARE AT");
+        oled_display_string(2, 0, "LOCATION");
+        oled_display_value(2, 9, detected_location);
+        oled_display_string(3, 0, "LOOK FOR");
+        oled_display_value(3, 9, current_location);
     }
-    else if (current_puzzle == PUZZLE_3)
+
+    print_serial("\r\nFSM: Wrong location reached. Detected location ");
+    print_uint(detected_location);
+    print_serial(", look for location ");
+    print_uint(current_location);
+    print_serial(".\r\n");
+
+    logger_log("FSM", "Wrong location reached");
+
+    leds_set_wrong_location_flash(detected_location);
+    buzzer_error_sound();
+
+    /*
+     * Stay in searching mode.
+     * BT scanning remains enabled.
+     */
+    state = STATE_WAIT_FOR_LOCATION;
+}
+
+static void start_current_puzzle(void)
+{
+    sync_current_puzzle_from_location();
+
+    state = STATE_PUZZLE_ACTIVE;
+
+    bt_set_scanning_enabled(false);
+
+    leds_set_active_puzzle(current_location);
+    leds_update_map(current_location, location_completed);
+
+    oled_clear();
+
+    if (is_dutch())
     {
-        oled_display_string(0, 0, is_dutch() ? "Ga naar plek 3" : "Go to location 3");
-        print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 3\r\n" : "\r\nFSM: Waiting for location 3\r\n");
-        logger_log("FSM", "Waiting for location 3");
+        oled_display_string(0, 0, "JUISTE PLEK");
     }
-    else if (current_puzzle == PUZZLE_4)
+    else
     {
-        oled_display_string(0, 0, is_dutch() ? "Ga naar plek 4" : "Go to location 4");
-        print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 4\r\n" : "\r\nFSM: Waiting for location 4\r\n");
-        logger_log("FSM", "Waiting for location 4");
+        oled_display_string(0, 0, "CORRECT LOC");
     }
-    else if (current_puzzle == PUZZLE_5)
-    {
-        oled_display_string(0, 0, is_dutch() ? "Ga naar plek 5" : "Go to location 5");
-        print_serial(is_dutch() ? "\r\nFSM: Wacht op plek 5\r\n" : "\r\nFSM: Waiting for location 5\r\n");
-        logger_log("FSM", "Waiting for location 5");
-    }
+
+    print_serial("\r\nFSM: Correct location detected. Starting location ");
+    print_uint(current_location);
+    print_serial(", puzzle ");
+    print_uint(((uint8_t)current_puzzle) + 1u);
+    print_serial(".\r\n");
+
+    logger_log("FSM", "Correct location detected");
+
+    puzzle_handler_start(current_puzzle);
 }
 
 static void handle_puzzle_solved(void)
 {
-    puzzle_solved[current_puzzle] = true;
+    location_completed[current_location - 1u] = true;
+
+    if (current_puzzle < PUZZLE_COUNT)
+    {
+        puzzle_solved[current_puzzle] = true;
+    }
+
+    buzzer_correct_sound();
 
     oled_clear();
-    oled_display_string(0, 0, is_dutch() ? "Puzzel klaar!" : "Puzzle solved!");
 
-    print_serial(is_dutch() ? "\r\nFSM: Puzzel opgelost\r\n" : "\r\nFSM: Puzzle solved\r\n");
+    if (is_dutch())
+    {
+        oled_display_string(0, 0, "PUZZEL KLAAR");
+    }
+    else
+    {
+        oled_display_string(0, 0, "PUZZLE SOLVED");
+    }
+
+    print_serial("\r\nFSM: Location ");
+    print_uint(current_location);
+    print_serial(" solved. Puzzle ");
+    print_uint(((uint8_t)current_puzzle) + 1u);
+    print_serial(" completed.\r\n");
+
     logger_log("FSM", "Puzzle solved");
 
-    if (current_puzzle == PUZZLE_5)
+    if (current_location >= 5u)
     {
         state = STATE_ALL_SOLVED;
 
-        oled_clear();
-        oled_display_string(0, 0, is_dutch() ? "Alles opgelost" : "All puzzles solved");
-        oled_display_string(1, 0, is_dutch() ? "Openen..." : "Unlocking...");
+        bt_set_scanning_enabled(false);
 
-        logger_log("FSM", "All puzzles solved");
+        leds_update_map(5u, location_completed);
+
+        oled_clear();
+
+        if (is_dutch())
+        {
+            oled_display_string(0, 0, "ALLES KLAAR");
+            oled_display_string(1, 0, "DOOS OPEN");
+        }
+        else
+        {
+            oled_display_string(0, 0, "ALL SOLVED");
+            oled_display_string(1, 0, "BOX OPEN");
+        }
 
         lock_unlock();
 
         state = STATE_UNLOCKED;
 
-        oled_clear();
-        oled_display_string(0, 0, is_dutch() ? "DOOS OPEN" : "BOX UNLOCKED");
-
-        print_serial(is_dutch() ? "\r\nFSM: Doos geopend\r\n" : "\r\nFSM: Box unlocked\r\n");
+        print_serial("\r\nFSM: Box unlocked\r\n");
         logger_log("FSM", "Box unlocked");
+        logger_end_run();
+
+        return;
     }
-    else
-    {
-        current_puzzle = (puzzle_id_t)(current_puzzle + 1);
-        state = STATE_WAIT_FOR_LOCATION;
-        show_waiting_for_location();
-    }
+
+    current_location++;
+    sync_current_puzzle_from_location();
+
+    show_waiting_for_location();
 }
 
 void fsm_init(void)
 {
     state = STATE_BOOT;
-    current_puzzle = PUZZLE_1;
 
-    for (uint32_t i = 0; i < PUZZLE_COUNT; i++)
+    current_location = 1u;
+    sync_current_puzzle_from_location();
+
+    for (uint32_t i = 0u; i < PUZZLE_COUNT; i++)
     {
         puzzle_solved[i] = false;
     }
 
+    for (uint32_t i = 0u; i < 5u; i++)
+    {
+        location_completed[i] = false;
+    }
+
+    bt_set_scanning_enabled(false);
+
     lock_lock();
 
     oled_clear();
-    oled_display_string(0, 0, "MOIBOX START");
+    oled_display_string(0, 0, "MOIBOX");
 
     print_serial("\r\nFSM: Boot\r\n");
     logger_log("FSM", "Boot");
 
-    state = STATE_WAIT_FOR_LOCATION;
     show_waiting_for_location();
 }
 
 void fsm_update(void)
 {
-    leds_update_map((uint8_t)current_puzzle, puzzle_solved);
+    leds_update_map(current_location, location_completed);
 
     if (state == STATE_PUZZLE_ACTIVE)
     {
@@ -165,6 +366,8 @@ void fsm_update(void)
 
 void fsm_handle_event(app_event_t event)
 {
+    uint8_t detected_location;
+
     if (event.type == EVENT_NONE)
     {
         return;
@@ -172,44 +375,37 @@ void fsm_handle_event(app_event_t event)
 
     if (event.type == EVENT_RESET_REQUEST)
     {
-        logger_log("FSM", "Reset");
-        state = STATE_RESET;
+        logger_log("FSM", "Reset requested");
+        logger_end_run();
         fsm_init();
+        logger_start_run();
         return;
-    }
+}
 
-    if (event.type >= EVENT_BEACON_1_DETECTED &&
-        event.type <= EVENT_BEACON_5_DETECTED)
+    if ((event.type >= EVENT_BEACON_1_DETECTED) &&
+        (event.type <= EVENT_BEACON_5_DETECTED))
     {
-        puzzle_id_t detected = beacon_event_to_puzzle(event.type);
+        detected_location = beacon_event_to_location(event.type);
 
         if (state == STATE_UNLOCKED)
         {
-            logger_log("FSM", "Beacon ignored because box already unlocked");
+            logger_log("FSM", "Beacon ignored because box is unlocked");
             return;
         }
 
-        if (detected == current_puzzle)
+        if (state == STATE_PUZZLE_ACTIVE)
         {
-            oled_clear();
-            oled_display_string(0, 0, is_dutch() ? "Juiste plek" : "Correct location");
+            logger_log("FSM", "Beacon ignored because puzzle is active");
+            return;
+        }
 
-            print_serial(is_dutch() ? "\r\nFSM: Juiste plek gevonden\r\n" : "\r\nFSM: Correct location detected\r\n");
-            logger_log("FSM", "Correct location detected");
-
-            puzzle_handler_start(current_puzzle);
-            state = STATE_PUZZLE_ACTIVE;
+        if (detected_location == current_location)
+        {
+            start_current_puzzle();
         }
         else
         {
-            oled_clear();
-            oled_display_string(0, 0, is_dutch() ? "Verkeerde plek" : "Wrong location");
-            oled_display_string(1, 0, is_dutch() ? "Ga terug" : "Go back");
-
-            print_serial(is_dutch() ? "\r\nFSM: Verkeerde plek\r\n" : "\r\nFSM: Wrong location detected\r\n");
-            logger_log("FSM", "Wrong location detected");
-
-            state = STATE_WRONG_LOCATION;
+            show_wrong_location(detected_location);
         }
 
         return;
@@ -256,6 +452,11 @@ puzzle_id_t fsm_get_current_puzzle(void)
     return current_puzzle;
 }
 
+uint8_t fsm_get_current_location(void)
+{
+    return current_location;
+}
+
 bool fsm_is_puzzle_solved(puzzle_id_t puzzle)
 {
     if (puzzle >= PUZZLE_COUNT)
@@ -264,4 +465,34 @@ bool fsm_is_puzzle_solved(puzzle_id_t puzzle)
     }
 
     return puzzle_solved[puzzle];
+}
+
+void fsm_set_puzzle_for_location(uint8_t location_number, puzzle_id_t puzzle)
+{
+    if ((location_number < 1u) || (location_number > 5u))
+    {
+        return;
+    }
+
+    if (puzzle >= PUZZLE_COUNT)
+    {
+        return;
+    }
+
+    puzzle_for_location[location_number - 1u] = puzzle;
+
+    if (location_number == current_location)
+    {
+        sync_current_puzzle_from_location();
+    }
+}
+
+puzzle_id_t fsm_get_puzzle_for_location(uint8_t location_number)
+{
+    if ((location_number < 1u) || (location_number > 5u))
+    {
+        return PUZZLE_COUNT;
+    }
+
+    return puzzle_for_location[location_number - 1u];
 }
