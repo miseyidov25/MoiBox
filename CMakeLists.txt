@@ -172,6 +172,12 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/HAL/BT/bt.h"
 "${ProjDirPath}/HAL/BT/lpuart2.c"
 "${ProjDirPath}/HAL/BT/lpuart2.h"
+"${ProjDirPath}/HAL/BT/lpuart1.c"
+"${ProjDirPath}/HAL/BT/lpuart1.h"
+"${ProjDirPath}/HAL/BT/lpuart2.c"
+"${ProjDirPath}/HAL/BT/lpuart2.h"
+"${ProjDirPath}/HAL/BT/hc05.c"
+"${ProjDirPath}/HAL/BT/hc05.h"
 
 "${ProjDirPath}/HAL/Display/leds.c"
 "${ProjDirPath}/HAL/Display/leds.h"

@@ -4,47 +4,69 @@
 #include <stdbool.h>
 
 #include "serial.h"
-#include "HAL/BT/lpuart2.h"
+#include "HAL/BT/lpuart1.h"
+#include "HAL/Display/oled.h"
+#include "App/fsm.h"
 
 /*
  * HM-10 wiring:
  *
- * HM-10 TXD -> P1_4 / LPUART2_RXD
- * HM-10 RXD -> P1_5 / LPUART2_TXD
+ * HM-10 TXD -> P3_8 / LPUART1_RXD
+ * HM-10 RXD -> P3_9 / LPUART1_TXD
  * HM-10 VCC -> 3.3V
  * HM-10 GND -> GND
- *
- * This file uses the same LPUART2 style as the working serial2lpuart project.
  */
 
 #define BT_UART_BAUD              9600u
 
 /*
- * Your working detected iBeacon:
+ * Bronkhorst iBeacon route:
  *
- * OK+DISC:4C000215:74278BDAB64445208F0C720EAF059935:0AEA0026C5:685E1C1A68F3:-064
+ * Main puzzle locations:
  *
- * major = 0x0AEA
- * minor = 0x0026
+ * Location 1 -> major 0x0B01, minor 0x0001
+ * Location 2 -> major 0x0B01, minor 0x0003
+ * Location 3 -> major 0x0B01, minor 0x0006
+ * Location 4 -> major 0x0B01, minor 0x0008
+ * Location 5 -> major 0x0B01, minor 0x000A
+ *
+ * In-between route beacons:
+ *
+ * Between location 1 and 2 -> minor 0x0002
+ * Between location 2 and 3 -> minor 0x0004, 0x0005
+ * Between location 3 and 4 -> minor 0x0007
+ * Between location 4 and 5 -> minor 0x0009
  */
-// #define BT_EXPECTED_MAJOR         0x0AEAu //HAN
-#define BT_EXPECTED_MAJOR         0x0B01u    //Brokhorst
 
-#define BT_RSSI_MIN              (-90)
-#define BT_DEBOUNCE_TICKS        20u
+#define BT_EXPECTED_MAJOR         0x0AEAu //HAN
+// #define BT_EXPECTED_MAJOR         0x0B01u    //Brokhorst
+
+#define BT_THERE_RSSI             (-70)
+#define BT_CLOSER_RSSI            (-85)
+#define BT_FAR_RSSI               (-95)
+
+#define BT_DEBOUNCE_TICKS         20u
 
 #define BT_SCAN_INTERVAL_MS       8000u
 #define BT_LINE_IDLE_TIMEOUT_MS   200u
 
 #define BT_LINE_BUFFER_SIZE       220u
 
-static uint16_t expected_minor[5] =
+typedef enum
 {
-    0x0001u,  /* Location 1 */
-    0x0003u,  /* Location 2 */
-    0x0006u,  /* Location 3 */
-    0x0008u,  /* Location 4 */
-    0x000Au   /* Location 5 */
+    BT_ZONE_OUT = 0,
+    BT_ZONE_FAR,
+    BT_ZONE_CLOSER,
+    BT_ZONE_THERE
+} bt_zone_t;
+
+static uint16_t location_minor[5] =
+{
+    0x0037u,
+    0x0003u,
+    0x0006u,
+    0x0008u,
+    0x000Au
 };
 
 static bool scanning_enabled = false;
@@ -54,6 +76,9 @@ static app_event_t pending_event;
 
 static uint16_t last_minor = 0u;
 static uint32_t debounce_counter = 0u;
+
+static uint32_t last_direction_minor = 0u;
+static uint32_t direction_message_cooldown = 0u;
 
 static uint32_t last_scan_ms = 0u;
 static uint32_t last_rx_ms = 0u;
@@ -92,6 +117,29 @@ static void print_int(int value)
     {
         buffer[index++] = (char)('0' + (value % 10));
         value /= 10;
+    }
+
+    while (index > 0)
+    {
+        serial_putchar(buffer[--index]);
+    }
+}
+
+static void print_uint(uint32_t value)
+{
+    char buffer[12];
+    int index = 0;
+
+    if (value == 0u)
+    {
+        serial_putchar('0');
+        return;
+    }
+
+    while ((value > 0u) && (index < 11))
+    {
+        buffer[index++] = (char)('0' + (value % 10u));
+        value /= 10u;
     }
 
     while (index > 0)
@@ -255,7 +303,7 @@ static int parse_rssi(const char *s)
 
     if (s == 0)
     {
-        return -50;
+        return -100;
     }
 
     if (*s == '-')
@@ -273,50 +321,223 @@ static int parse_rssi(const char *s)
 
     if (!found_digit)
     {
-        return -50;
+        return -100;
     }
 
     return sign * value;
 }
 
-static app_event_type_t minor_to_event(uint16_t minor)
+static bt_zone_t rssi_to_zone(int rssi)
 {
-    if (minor == expected_minor[0])
+    if (rssi >= BT_THERE_RSSI)
     {
-        return EVENT_BEACON_1_DETECTED;
+        return BT_ZONE_THERE;
     }
 
-    if (minor == expected_minor[1])
+    if (rssi >= BT_CLOSER_RSSI)
     {
-        return EVENT_BEACON_2_DETECTED;
+        return BT_ZONE_CLOSER;
     }
 
-    if (minor == expected_minor[2])
+    if (rssi >= BT_FAR_RSSI)
     {
-        return EVENT_BEACON_3_DETECTED;
+        return BT_ZONE_FAR;
     }
 
-    if (minor == expected_minor[3])
-    {
-        return EVENT_BEACON_4_DETECTED;
-    }
-
-    if (minor == expected_minor[4])
-    {
-        return EVENT_BEACON_5_DETECTED;
-    }
-
-    return EVENT_NONE;
+    return BT_ZONE_OUT;
 }
 
-/*
- * Parses:
- *
- * OK+DISC:4C000215:UUID32:MAJOR4MINOR4TX2:MAC12:RSSI
- *
- * Example:
- * OK+DISC:4C000215:74278BDAB64445208F0C720EAF059935:0AEA0026C5:685E1C1A68F3:-064
- */
+static const char *zone_to_text(bt_zone_t zone)
+{
+    switch (zone)
+    {
+        case BT_ZONE_THERE:
+            return "THERE 0-3m";
+
+        case BT_ZONE_CLOSER:
+            return "CLOSER 3-9m";
+
+        case BT_ZONE_FAR:
+            return "FAR 9m+";
+
+        default:
+            return "OUT OF RANGE";
+    }
+}
+
+static uint8_t minor_to_location(uint16_t minor)
+{
+    for (uint8_t i = 0u; i < 5u; i++)
+    {
+        if (minor == location_minor[i])
+        {
+            return (uint8_t)(i + 1u);
+        }
+    }
+
+    return 0u;
+}
+
+static uint8_t minor_to_direction_target(uint16_t minor)
+{
+    switch (minor)
+    {
+        case 0x0002u:
+            return 2u;
+
+        case 0x0004u:
+        case 0x0005u:
+            return 3u;
+
+        case 0x0007u:
+            return 4u;
+
+        case 0x0009u:
+            return 5u;
+
+        default:
+            return 0u;
+    }
+}
+
+static app_event_type_t location_to_event(uint8_t location)
+{
+    switch (location)
+    {
+        case 1u:
+            return EVENT_BEACON_1_DETECTED;
+
+        case 2u:
+            return EVENT_BEACON_2_DETECTED;
+
+        case 3u:
+            return EVENT_BEACON_3_DETECTED;
+
+        case 4u:
+            return EVENT_BEACON_4_DETECTED;
+
+        case 5u:
+            return EVENT_BEACON_5_DETECTED;
+
+        default:
+            return EVENT_NONE;
+    }
+}
+
+static void oled_show_beacon_distance(uint8_t location, bt_zone_t zone)
+{
+    oled_clear();
+
+    oled_display_string(0, 0, "IBEACON LOC");
+    oled_display_value(0, 12, location);
+
+    if (zone == BT_ZONE_THERE)
+    {
+        oled_display_string(1, 0, "SIGNAL: THERE");
+        oled_display_string(2, 0, "0-3 METERS");
+        oled_display_string(3, 0, "STARTING...");
+    }
+    else if (zone == BT_ZONE_CLOSER)
+    {
+        oled_display_string(1, 0, "SIGNAL: CLOSER");
+        oled_display_string(2, 0, "3-9 METERS");
+        oled_display_string(3, 0, "MOVE CLOSER");
+    }
+    else if (zone == BT_ZONE_FAR)
+    {
+        oled_display_string(1, 0, "SIGNAL: FAR");
+        oled_display_string(2, 0, "9+ METERS");
+        oled_display_string(3, 0, "KEEP LOOKING");
+    }
+    else
+    {
+        oled_display_string(1, 0, "SIGNAL: OUT");
+        oled_display_string(2, 0, "OUT OF RANGE");
+        oled_display_string(3, 0, "KEEP LOOKING");
+    }
+}
+
+static void oled_show_right_direction(uint8_t target_location, bt_zone_t zone)
+{
+    oled_clear();
+
+    oled_display_string(0, 0, "RIGHT DIRECTION");
+    oled_display_string(1, 0, "GO TO LOC");
+    oled_display_value(1, 10, target_location);
+
+    if (zone == BT_ZONE_THERE)
+    {
+        oled_display_string(2, 0, "ROUTE: VERY NEAR");
+        oled_display_string(3, 0, "KEEP GOING");
+    }
+    else if (zone == BT_ZONE_CLOSER)
+    {
+        oled_display_string(2, 0, "ROUTE: CLOSER");
+        oled_display_string(3, 0, "KEEP GOING");
+    }
+    else if (zone == BT_ZONE_FAR)
+    {
+        oled_display_string(2, 0, "ROUTE: FAR");
+        oled_display_string(3, 0, "KEEP GOING");
+    }
+    else
+    {
+        oled_display_string(2, 0, "ROUTE SIGNAL");
+        oled_display_string(3, 0, "WEAK");
+    }
+}
+
+static void handle_direction_beacon(uint16_t minor, int rssi)
+{
+    uint8_t target_location;
+    uint8_t current_target;
+    bt_zone_t zone;
+
+    if (!scanning_enabled)
+    {
+        return;
+    }
+
+    target_location = minor_to_direction_target(minor);
+
+    if (target_location == 0u)
+    {
+        return;
+    }
+
+    current_target = fsm_get_current_location();
+
+    if (target_location != current_target)
+    {
+        print_serial("BT: route beacon ignored, not for current target\r\n");
+        return;
+    }
+
+    zone = rssi_to_zone(rssi);
+
+    if (zone == BT_ZONE_OUT)
+    {
+        print_serial("BT: route beacon ignored, too weak\r\n");
+        return;
+    }
+
+    if ((last_direction_minor == minor) && (direction_message_cooldown > 0u))
+    {
+        return;
+    }
+
+    last_direction_minor = minor;
+    direction_message_cooldown = 3u;
+
+    print_serial("BT: route beacon detected, going in right direction to location ");
+    print_uint(target_location);
+    print_serial(" | ");
+    print_serial(zone_to_text(zone));
+    print_serial("\r\n");
+
+    oled_show_right_direction(target_location, zone);
+}
+
 static bool parse_hm10_ibeacon_line(
     const char *line,
     uint16_t *major,
@@ -351,10 +572,6 @@ static bool parse_hm10_ibeacon_line(
 
     field_company = p + 8;
 
-    /*
-     * iBeacon prefix.
-     * Ignore normal BLE devices with 00000000 or other prefixes.
-     */
     if (find_text_ignore_case(field_company, "4C000215") != field_company)
     {
         return false;
@@ -439,7 +656,7 @@ static void send_at_command(const char *cmd)
 
     while (*cmd != '\0')
     {
-        lpuart2_putchar((uint8_t)*cmd);
+        lpuart1_putchar((uint8_t)*cmd);
         cmd++;
     }
 }
@@ -452,6 +669,8 @@ static void process_bt_line(const char *line)
     const char *uuid_start;
     const char *mac_start;
     int rssi;
+    uint8_t location;
+    bt_zone_t zone;
 
     if ((line == 0) || (line[0] == '\0'))
     {
@@ -467,6 +686,9 @@ static void process_bt_line(const char *line)
             &mac_start,
             &rssi))
     {
+        zone = rssi_to_zone(rssi);
+        location = minor_to_location(minor);
+
         print_serial("\r\nBT: iBeacon detected\r\n");
 
         print_serial("UUID: ");
@@ -485,9 +707,24 @@ static void process_bt_line(const char *line)
         bt_print_fixed_field(mac_start, 12u);
         print_serial("  RSSI: ");
         print_int(rssi);
+        print_serial("  Zone: ");
+        print_serial(zone_to_text(zone));
         print_serial("\r\n");
 
-        bt_detect_beacon(major, minor, rssi);
+        if (major != BT_EXPECTED_MAJOR)
+        {
+            bt_detect_beacon(major, minor, rssi);
+            return;
+        }
+
+        if (location != 0u)
+        {
+            oled_show_beacon_distance(location, zone);
+            bt_detect_beacon(major, minor, rssi);
+            return;
+        }
+
+        handle_direction_beacon(minor, rssi);
     }
 }
 
@@ -566,24 +803,21 @@ void bt_init(void)
     last_minor = 0u;
     debounce_counter = 0u;
 
+    last_direction_minor = 0u;
+    direction_message_cooldown = 0u;
+
     last_scan_ms = 0u;
     last_rx_ms = 0u;
     line_index = 0u;
 
-    lpuart2_init(BT_UART_BAUD);
+    lpuart1_init(BT_UART_BAUD);
 
-    print_serial("BT: active HM-10 scanner initialized\r\n");
+    print_serial("BT: active HM-10 scanner initialized on LPUART1\r\n");
     print_serial("BT: expected major ");
     print_hex4(BT_EXPECTED_MAJOR);
     print_serial("\r\n");
 
     bt_send_init_commands();
-
-    /*
-     * Important:
-     * Do NOT start scanning here.
-     * The FSM enables scanning only while waiting for a location.
-     */
 }
 
 void bt_update(void)
@@ -595,16 +829,14 @@ void bt_update(void)
         debounce_counter--;
     }
 
-    /*
-     * Always drain the LPUART2 FIFO.
-     *
-     * If scanning is enabled, parse received HM-10 data.
-     * If scanning is disabled, discard it so old scan results do not
-     * start puzzles while a puzzle is active.
-     */
-    while (lpuart2_rxcnt() > 0u)
+    if (direction_message_cooldown > 0u)
     {
-        char c = (char)lpuart2_getchar();
+        direction_message_cooldown--;
+    }
+
+    while (lpuart1_rxcnt() > 0u)
+    {
+        char c = (char)lpuart1_getchar();
 
         if (scanning_enabled)
         {
@@ -656,6 +888,8 @@ bool bt_get_event(app_event_t *event)
 void bt_detect_beacon(uint16_t major, uint16_t minor, int rssi)
 {
     app_event_type_t event_type;
+    uint8_t location;
+    bt_zone_t zone;
 
     if (!scanning_enabled)
     {
@@ -668,9 +902,25 @@ void bt_detect_beacon(uint16_t major, uint16_t minor, int rssi)
         return;
     }
 
-    if (rssi < BT_RSSI_MIN)
+    zone = rssi_to_zone(rssi);
+
+    if (zone == BT_ZONE_OUT)
     {
-        print_serial("BT: iBeacon ignored, weak RSSI\r\n");
+        print_serial("BT: iBeacon ignored, out of range\r\n");
+        return;
+    }
+
+    location = minor_to_location(minor);
+
+    if (location == 0u)
+    {
+        print_serial("BT: iBeacon ignored, unknown minor\r\n");
+        return;
+    }
+
+    if (zone != BT_ZONE_THERE)
+    {
+        print_serial("BT: iBeacon seen, not close enough to trigger\r\n");
         return;
     }
 
@@ -679,11 +929,10 @@ void bt_detect_beacon(uint16_t major, uint16_t minor, int rssi)
         return;
     }
 
-    event_type = minor_to_event(minor);
+    event_type = location_to_event(location);
 
     if (event_type == EVENT_NONE)
     {
-        print_serial("BT: iBeacon ignored, unknown minor\r\n");
         return;
     }
 
@@ -706,7 +955,7 @@ void bt_set_expected_minor_for_puzzle(uint8_t puzzle_number, uint16_t minor)
         return;
     }
 
-    expected_minor[puzzle_number - 1u] = minor;
+    location_minor[puzzle_number - 1u] = minor;
 }
 
 uint16_t bt_get_expected_minor_for_puzzle(uint8_t puzzle_number)
@@ -716,15 +965,11 @@ uint16_t bt_get_expected_minor_for_puzzle(uint8_t puzzle_number)
         return 0u;
     }
 
-    return expected_minor[puzzle_number - 1u];
+    return location_minor[puzzle_number - 1u];
 }
 
 void bt_debug_simulate_minor(uint16_t minor)
 {
-    /*
-     * Debug simulate ignores HM-10 data but still requires scanning enabled,
-     * because it represents a location detection.
-     */
     bt_detect_beacon(BT_EXPECTED_MAJOR, minor, -50);
 }
 
@@ -738,6 +983,8 @@ void bt_set_scanning_enabled(bool enabled)
     scanning_enabled = enabled;
 
     line_index = 0u;
+    last_direction_minor = 0u;
+    direction_message_cooldown = 0u;
 
     if (enabled)
     {

@@ -5,101 +5,210 @@
 #include <stdbool.h>
 
 /*
- * Set to 1 when buzzer pin is confirmed.
- *
- * While this is 0, the code compiles and puzzle logic works,
- * but no real sound comes out.
+ * Active buzzer pin:
+ * P3_31 = buzzer signal
  */
-#define BUZZER_ENABLED 0
+#define BUZZER_PIN_MASK     (1u << 31u)
 
 /*
- * Change to match the actual GPIO pin used for the buzzer.
- * The current settings are for P3_5, which is the default on the A153
+ * Morse timing.
  */
-#define BUZZER_GPIO GPIO3
-#define BUZZER_PORT PORT3
-#define BUZZER_PIN  5u
+#define DOT_MS              150u
+#define DASH_MS             (3u * DOT_MS)
+#define ELEMENT_GAP_MS      DOT_MS
+#define LETTER_GAP_MS       (3u * DOT_MS)
+#define WORD_GAP_MS         (7u * DOT_MS)
 
-static bool buzzer_active = false;
-static uint32_t buzzer_until_ms = 0u;
+/*
+ * Repeating reminder timing while puzzle is active.
+ */
+#define REPEAT_ON_MS        700u
+#define REPEAT_OFF_MS       900u
 
-static volatile uint32_t local_delay_counter;
+/*
+ * Rough delay.
+ * If sounds are too fast/slow, tune this.
+ */
+#define DELAY_CALIBRATION   6000u
 
-static void tiny_delay(uint32_t count)
+static bool timed_beep_active = false;
+static uint32_t timed_beep_until_ms = 0u;
+
+static bool repeat_enabled = false;
+static bool repeat_beep_on = false;
+static uint32_t repeat_next_ms = 0u;
+
+static void delay_loop(volatile uint32_t count)
 {
-    local_delay_counter = count;
-
-    while (local_delay_counter > 0u)
+    while (count > 0u)
     {
-        local_delay_counter--;
+        count--;
     }
 }
 
-static void pause_short(void)
+static void delay_ms_blocking(uint32_t duration_ms)
 {
-    tiny_delay(35000u);
-}
-
-static void pause_medium(void)
-{
-    tiny_delay(90000u);
-}
-
-static void pause_long(void)
-{
-    tiny_delay(180000u);
-}
-
-static void buzzer_pin_high(void)
-{
-#if BUZZER_ENABLED
-    BUZZER_GPIO->PSOR = (1u << BUZZER_PIN);
-#endif
-}
-
-static void buzzer_pin_low(void)
-{
-#if BUZZER_ENABLED
-    BUZZER_GPIO->PCOR = (1u << BUZZER_PIN);
-#endif
-}
-
-static void tone_blocking(uint32_t cycles, uint32_t half_period_delay)
-{
-#if BUZZER_ENABLED
-    for (uint32_t i = 0u; i < cycles; i++)
+    while (duration_ms > 0u)
     {
-        buzzer_pin_high();
-        tiny_delay(half_period_delay);
-        buzzer_pin_low();
-        tiny_delay(half_period_delay);
+        delay_loop(DELAY_CALIBRATION);
+        duration_ms--;
     }
-#else
-    (void)cycles;
-    (void)half_period_delay;
-#endif
+}
+
+void buzzer_init(void)
+{
+    timed_beep_active = false;
+    timed_beep_until_ms = 0u;
+
+    repeat_enabled = false;
+    repeat_beep_on = false;
+    repeat_next_ms = 0u;
+
+    /*
+     * Enable PORT3 and GPIO3.
+     */
+    MRCC0->MRCC_GLB_CC1_SET =
+        MRCC_MRCC_GLB_CC1_PORT3(1) |
+        MRCC_MRCC_GLB_CC1_GPIO3(1);
+
+    /*
+     * Release PORT3 and GPIO3 from reset.
+     */
+    MRCC0->MRCC_GLB_RST1_SET =
+        MRCC_MRCC_GLB_RST1_PORT3(1) |
+        MRCC_MRCC_GLB_RST1_GPIO3(1);
+
+    /*
+     * Configure P3_31 as GPIO.
+     */
+    PORT3->PCR[31] = PORT_PCR_MUX(0);
+
+    /*
+     * Set P3_31 as output.
+     */
+    GPIO3->PDDR |= BUZZER_PIN_MASK;
+
+    buzzer_off();
+}
+
+void buzzer_update(uint32_t current_ms)
+{
+    /*
+     * Non-blocking repeating reminder.
+     */
+    if (repeat_enabled)
+    {
+        if (current_ms >= repeat_next_ms)
+        {
+            if (repeat_beep_on)
+            {
+                buzzer_off();
+                repeat_beep_on = false;
+                repeat_next_ms = current_ms + REPEAT_OFF_MS;
+            }
+            else
+            {
+                buzzer_on();
+                repeat_beep_on = true;
+                repeat_next_ms = current_ms + REPEAT_ON_MS;
+            }
+        }
+
+        return;
+    }
+
+    /*
+     * Non-blocking timed beep.
+     */
+    if (timed_beep_active && (current_ms >= timed_beep_until_ms))
+    {
+        buzzer_off();
+        timed_beep_active = false;
+    }
+}
+
+void buzzer_on(void)
+{
+    /*
+     * Active buzzer style:
+     * HIGH = sound.
+     */
+    GPIO3->PSOR = BUZZER_PIN_MASK;
+}
+
+void buzzer_off(void)
+{
+    /*
+     * LOW = silent.
+     */
+    GPIO3->PCOR = BUZZER_PIN_MASK;
+}
+
+void buzzer_beep(uint32_t duration_ms)
+{
+    extern volatile uint32_t ms;
+
+    repeat_enabled = false;
+    repeat_beep_on = false;
+
+    timed_beep_active = true;
+    timed_beep_until_ms = ms + duration_ms;
+
+    buzzer_on();
+}
+
+void buzzer_set(uint32_t frequency_hz)
+{
+    /*
+     * Compatibility function.
+     *
+     * For active buzzer:
+     * 0     -> off
+     * other -> on
+     */
+    if (frequency_hz == 0u)
+    {
+        buzzer_off();
+    }
+    else
+    {
+        buzzer_on();
+    }
+}
+
+static void buzzer_beep_blocking(uint32_t duration_ms)
+{
+    buzzer_on();
+    delay_ms_blocking(duration_ms);
+    buzzer_off();
+}
+
+static void morse_element_gap(void)
+{
+    buzzer_off();
+    delay_ms_blocking(ELEMENT_GAP_MS);
+}
+
+static void morse_letter_gap(void)
+{
+    buzzer_off();
+    delay_ms_blocking(LETTER_GAP_MS);
+}
+
+static void morse_word_gap(void)
+{
+    buzzer_off();
+    delay_ms_blocking(WORD_GAP_MS);
 }
 
 static void morse_dot(void)
 {
-    tone_blocking(70u, 500u);
-    pause_short();
+    buzzer_beep_blocking(DOT_MS);
 }
 
 static void morse_dash(void)
 {
-    tone_blocking(210u, 500u);
-    pause_short();
-}
-
-static void morse_gap_letter(void)
-{
-    pause_medium();
-}
-
-static void morse_gap_word(void)
-{
-    pause_long();
+    buzzer_beep_blocking(DASH_MS);
 }
 
 static char to_upper(char c)
@@ -161,82 +270,66 @@ static const char *morse_for_char(char c)
     }
 }
 
-void buzzer_init(void)
+static void morse_symbol(char symbol)
 {
-    buzzer_active = false;
-    buzzer_until_ms = 0u;
-
-#if BUZZER_ENABLED
-    /*
-     * Enable PORT3/GPIO3 if using P3_x.
-     * Change this if buzzer uses another port.
-     */
-    MRCC0->MRCC_GLB_CC1_SET |= MRCC_MRCC_GLB_CC1_PORT3(1);
-    MRCC0->MRCC_GLB_CC1_SET |= MRCC_MRCC_GLB_CC1_GPIO3(1);
-
-    MRCC0->MRCC_GLB_RST1_SET |= MRCC_MRCC_GLB_RST1_PORT3(1);
-    MRCC0->MRCC_GLB_RST1_SET |= MRCC_MRCC_GLB_RST1_GPIO3(1);
-
-    BUZZER_PORT->PCR[BUZZER_PIN] =
-        PORT_PCR_MUX(0) |
-        PORT_PCR_IBE(1);
-
-    BUZZER_GPIO->PDDR |= (1u << BUZZER_PIN);
-    buzzer_pin_low();
-#endif
-}
-
-void buzzer_update(uint32_t current_ms)
-{
-    if (buzzer_active && (current_ms >= buzzer_until_ms))
+    if (symbol == '.')
     {
-        buzzer_off();
+        morse_dot();
+    }
+    else if (symbol == '-')
+    {
+        morse_dash();
     }
 }
 
-void buzzer_on(void)
+void buzzer_morse_digit(uint8_t digit)
 {
-    buzzer_active = true;
-    buzzer_pin_high();
+    static const char *number_morse[10] =
+    {
+        "-----",
+        ".----",
+        "..---",
+        "...--",
+        "....-",
+        ".....",
+        "-....",
+        "--...",
+        "---..",
+        "----."
+    };
+
+    const char *pattern;
+
+    if (digit > 9u)
+    {
+        digit = digit % 10u;
+    }
+
+    pattern = number_morse[digit];
+
+    for (uint8_t i = 0u; i < 5u; i++)
+    {
+        morse_symbol(pattern[i]);
+
+        if (i < 4u)
+        {
+            morse_element_gap();
+        }
+    }
+
+    morse_letter_gap();
 }
 
-void buzzer_off(void)
+void buzzer_morse_S(void)
 {
-    buzzer_active = false;
-    buzzer_pin_low();
-}
+    morse_dot();
+    morse_element_gap();
 
-void buzzer_beep(uint32_t duration_ms)
-{
-    extern volatile uint32_t ms;
+    morse_dot();
+    morse_element_gap();
 
-    buzzer_active = true;
-    buzzer_until_ms = ms + duration_ms;
-    buzzer_pin_high();
-}
-
-void buzzer_correct_sound(void)
-{
-
-    tone_blocking(80u, 600u);
-    pause_short();
-    tone_blocking(120u, 350u);
-}
-
-void buzzer_error_sound(void)
-{
-
-    tone_blocking(180u, 1000u);
-}
-
-void buzzer_success(void)
-{
-    buzzer_correct_sound();
-}
-
-void buzzer_fail(void)
-{
-    buzzer_error_sound();
+    morse_dot();
+    morse_letter_gap();
 }
 
 void buzzer_morse_string(const char *text)
@@ -252,7 +345,7 @@ void buzzer_morse_string(const char *text)
 
         if (c == ' ')
         {
-            morse_gap_word();
+            morse_word_gap();
             text++;
             continue;
         }
@@ -261,19 +354,76 @@ void buzzer_morse_string(const char *text)
 
         while (*pattern != '\0')
         {
-            if (*pattern == '.')
-            {
-                morse_dot();
-            }
-            else if (*pattern == '-')
-            {
-                morse_dash();
-            }
+            morse_symbol(*pattern);
 
             pattern++;
+
+            if (*pattern != '\0')
+            {
+                morse_element_gap();
+            }
         }
 
-        morse_gap_letter();
+        morse_letter_gap();
         text++;
     }
+}
+
+void buzzer_success(void)
+{
+    buzzer_repeat_stop();
+
+    buzzer_beep_blocking(80u);
+    delay_ms_blocking(80u);
+
+    buzzer_beep_blocking(80u);
+    delay_ms_blocking(80u);
+
+    buzzer_beep_blocking(220u);
+}
+
+void buzzer_fail(void)
+{
+    buzzer_beep_blocking(300u);
+    delay_ms_blocking(120u);
+
+    buzzer_beep_blocking(300u);
+}
+
+void buzzer_click(void)
+{
+    buzzer_beep_blocking(50u);
+}
+
+void buzzer_correct_sound(void)
+{
+    buzzer_success();
+}
+
+void buzzer_error_sound(void)
+{
+    buzzer_fail();
+}
+
+void buzzer_repeat_start(void)
+{
+    extern volatile uint32_t ms;
+
+    timed_beep_active = false;
+
+    repeat_enabled = true;
+    repeat_beep_on = false;
+    repeat_next_ms = ms;
+}
+
+void buzzer_repeat_stop(void)
+{
+    repeat_enabled = false;
+    repeat_beep_on = false;
+    repeat_next_ms = 0u;
+
+    timed_beep_active = false;
+    timed_beep_until_ms = 0u;
+
+    buzzer_off();
 }

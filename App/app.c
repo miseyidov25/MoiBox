@@ -14,13 +14,19 @@
 #include "HAL/Input/keypad.h"
 #include "HAL/Input/buttons.h"
 #include "HAL/BT/bt.h"
+#include "HAL/BT/hc05.h"
 #include "HAL/Storage/logger.h"
 
 volatile uint32_t ms = 0u;
 
+#define HC05_COMMAND_BUFFER_SIZE 32u
+
 static bool time_command_active = false;
 static char time_command_buffer[32];
 static uint32_t time_command_index = 0u;
+
+static char hc05_command_buffer[HC05_COMMAND_BUFFER_SIZE];
+static uint32_t hc05_command_index = 0u;
 
 static void print_serial(const char *s)
 {
@@ -65,9 +71,56 @@ static void print_current_settings(void)
     print_serial("\r\n");
 }
 
+static void hc05_print_current_settings(void)
+{
+    hc05_write_string("Difficulty: ");
+    hc05_write_string(app_settings_difficulty_to_string(app_settings_get_difficulty()));
+    hc05_write_string("\r\n");
+
+    hc05_write_string("Language: ");
+    hc05_write_string(app_settings_language_to_string(app_settings_get_language()));
+    hc05_write_string("\r\n");
+}
+
 static int is_digit(char c)
 {
     return (c >= '0') && (c <= '9');
+}
+
+static int str_equal(const char *a, const char *b)
+{
+    while ((*a != '\0') && (*b != '\0'))
+    {
+        char ca = *a;
+        char cb = *b;
+
+        if ((ca >= 'a') && (ca <= 'z'))
+        {
+            ca = (char)(ca - 'a' + 'A');
+        }
+
+        if ((cb >= 'a') && (cb <= 'z'))
+        {
+            cb = (char)(cb - 'a' + 'A');
+        }
+
+        if (ca != cb)
+        {
+            return 0;
+        }
+
+        a++;
+        b++;
+    }
+
+    return (*a == '\0') && (*b == '\0');
+}
+
+static void hc05_print_to_usb(const char *s)
+{
+    print_serial("HC05: ");
+    print_serial(s);
+    print_serial("\r\n");
 }
 
 static uint32_t parse_uint32(const char *s, int *ok)
@@ -85,7 +138,7 @@ static uint32_t parse_uint32(const char *s, int *ok)
         return 0u;
     }
 
-    while (*s == ' ' || *s == '=')
+    while ((*s == ' ') || (*s == '='))
     {
         s++;
     }
@@ -155,26 +208,21 @@ static int parse_datetime_command(
         return 0;
     }
 
-    while (*s == ' ' || *s == '=')
+    while ((*s == ' ') || (*s == '='))
     {
         s++;
     }
 
-    /*
-     * Format:
-     * T2026-05-27 14:30:00
-     * T2026-05-27T14:30:00
-     */
     *year = (uint16_t)parse_fixed_number(s, 4u, &ok);
 
-    if (!ok || s[4] != '-')
+    if (!ok || (s[4] != '-'))
     {
         return 0;
     }
 
     *month = (uint8_t)parse_fixed_number(s + 5, 2u, &ok);
 
-    if (!ok || s[7] != '-')
+    if (!ok || (s[7] != '-'))
     {
         return 0;
     }
@@ -188,14 +236,14 @@ static int parse_datetime_command(
 
     *hour = (uint8_t)parse_fixed_number(s + 11, 2u, &ok);
 
-    if (!ok || s[13] != ':')
+    if (!ok || (s[13] != ':'))
     {
         return 0;
     }
 
     *minute = (uint8_t)parse_fixed_number(s + 14, 2u, &ok);
 
-    if (!ok || s[16] != ':')
+    if (!ok || (s[16] != ':'))
     {
         return 0;
     }
@@ -240,7 +288,7 @@ static void process_time_command(void)
 
     unix_seconds = parse_uint32(s, &ok);
 
-    if (ok && unix_seconds > 1000000000u)
+    if (ok && (unix_seconds > 1000000000u))
     {
         logger_set_unix_time(unix_seconds, app_millis());
         print_serial("TIME: synchronized from Unix seconds\r\n");
@@ -280,7 +328,7 @@ static int handle_time_command_char(int ch)
         return 0;
     }
 
-    if (ch == '\r' || ch == '\n')
+    if ((ch == '\r') || (ch == '\n'))
     {
         process_time_command();
 
@@ -298,171 +346,311 @@ static int handle_time_command_char(int ch)
     return 1;
 }
 
-static void handle_serial_input(void)
+static void process_command_char(char ch, bool from_hc05)
 {
     app_event_t event;
 
+    event.type = EVENT_NONE;
+    event.keypad_key = '\0';
+    event.rssi = 0;
+
+    if ((ch == '\r') || (ch == '\n'))
+    {
+        return;
+    }
+
+    logger_log_input_char(ch);
+
+    if (ch == 'E')
+    {
+        app_settings_set_difficulty(APP_DIFFICULTY_EASY);
+        logger_log_settings(from_hc05 ? "HC05 difficulty EASY" : "USB difficulty EASY");
+
+        if (from_hc05)
+        {
+            hc05_write_string("OK EASY\r\n");
+            hc05_print_current_settings();
+        }
+        else
+        {
+            print_serial("Difficulty set to EASY\r\n");
+            print_current_settings();
+        }
+    }
+    else if (ch == 'H')
+    {
+        app_settings_set_difficulty(APP_DIFFICULTY_HARD);
+        logger_log_settings(from_hc05 ? "HC05 difficulty HARD" : "USB difficulty HARD");
+
+        if (from_hc05)
+        {
+            hc05_write_string("OK HARD\r\n");
+            hc05_print_current_settings();
+        }
+        else
+        {
+            print_serial("Difficulty set to HARD\r\n");
+            print_current_settings();
+        }
+    }
+    else if (ch == 'P')
+    {
+        app_settings_set_language(APP_LANGUAGE_ENGLISH);
+        logger_log_settings(from_hc05 ? "HC05 language ENGLISH" : "USB language ENGLISH");
+
+        if (from_hc05)
+        {
+            hc05_write_string("OK ENGLISH\r\n");
+            hc05_print_current_settings();
+        }
+        else
+        {
+            print_serial("Language set to ENGLISH\r\n");
+            print_current_settings();
+        }
+    }
+    else if (ch == 'D')
+    {
+        app_settings_set_language(APP_LANGUAGE_DUTCH);
+        logger_log_settings(from_hc05 ? "HC05 language DUTCH" : "USB language DUTCH");
+
+        if (from_hc05)
+        {
+            hc05_write_string("OK DUTCH\r\n");
+            hc05_print_current_settings();
+        }
+        else
+        {
+            print_serial("Language set to DUTCH\r\n");
+            print_current_settings();
+        }
+    }
+    else if (ch == 'S')
+    {
+        logger_log_settings(from_hc05 ? "HC05 settings requested" : "USB settings requested");
+
+        if (from_hc05)
+        {
+            hc05_write_string("STATUS\r\n");
+            hc05_print_current_settings();
+        }
+        else
+        {
+            print_current_settings();
+        }
+    }
+    else if (((ch >= '0') && (ch <= '9')) || (ch == '*') || (ch == '#'))
+    {
+        event.type = EVENT_KEYPAD_KEY;
+        event.keypad_key = ch;
+    }
+    else if (ch == 'u')
+    {
+        event.type = EVENT_BEACON_1_DETECTED;
+    }
+    else if (ch == 'n')
+    {
+        event.type = EVENT_BEACON_2_DETECTED;
+    }
+    else if (ch == 'm')
+    {
+        event.type = EVENT_BEACON_3_DETECTED;
+    }
+    else if (ch == 'j')
+    {
+        event.type = EVENT_BEACON_4_DETECTED;
+    }
+    else if (ch == 'k')
+    {
+        event.type = EVENT_BEACON_5_DETECTED;
+    }
+    else if (ch == 'r')
+    {
+        event.type = EVENT_BUTTON_RED;
+    }
+    else if (ch == 'g')
+    {
+        event.type = EVENT_BUTTON_GREEN;
+    }
+    else if (ch == 'b')
+    {
+        event.type = EVENT_BUTTON_BLUE;
+    }
+    else if (ch == 'y')
+    {
+        event.type = EVENT_BUTTON_YELLOW;
+    }
+    else if (ch == 'x')
+    {
+        logger_log("SYSTEM", from_hc05 ? "HC05 reset requested" : "USB reset requested");
+        event.type = EVENT_RESET_REQUEST;
+    }
+    else
+    {
+        if (from_hc05)
+        {
+            hc05_write_string("ERR UNKNOWN\r\n");
+        }
+        else
+        {
+            print_serial("Ignored serial input\r\n");
+        }
+
+        logger_log("INPUT", "Ignored input");
+    }
+
+    send_event(event);
+}
+
+static void process_hc05_command(const char *cmd)
+{
+    app_event_t event;
+
+    event.type = EVENT_NONE;
+    event.keypad_key = '\0';
+    event.rssi = 0;
+
+    print_serial("HC05 RX: ");
+    print_serial(cmd);
+    print_serial("\r\n");
+
+    logger_log("HC05", cmd);
+
+    if (str_equal(cmd, "START"))
+    {
+        /*
+         * Currently the MoiBox starts automatically after boot.
+         * START is accepted and printed so the app can confirm connection.
+         */
+        hc05_print_to_usb("CMD START");
+        hc05_write_string("OK START\r\n");
+    }
+    else if (str_equal(cmd, "RESET"))
+    {
+        hc05_print_to_usb("CMD RESET");
+        hc05_write_string("OK RESET\r\n");
+
+        event.type = EVENT_RESET_REQUEST;
+    }
+    else if (str_equal(cmd, "EASY") || str_equal(cmd, "E"))
+    {
+        app_settings_set_difficulty(APP_DIFFICULTY_EASY);
+
+        hc05_print_to_usb("CMD EASY");
+        hc05_write_string("OK EASY\r\n");
+        hc05_print_current_settings();
+
+        print_current_settings();
+        logger_log_settings("HC05 difficulty EASY");
+    }
+    else if (str_equal(cmd, "HARD") || str_equal(cmd, "H"))
+    {
+        app_settings_set_difficulty(APP_DIFFICULTY_HARD);
+
+        hc05_print_to_usb("CMD HARD");
+        hc05_write_string("OK HARD\r\n");
+        hc05_print_current_settings();
+
+        print_current_settings();
+        logger_log_settings("HC05 difficulty HARD");
+    }
+    else if (str_equal(cmd, "ENGLISH") || str_equal(cmd, "P"))
+    {
+        app_settings_set_language(APP_LANGUAGE_ENGLISH);
+
+        hc05_print_to_usb("CMD ENGLISH");
+        hc05_write_string("OK ENGLISH\r\n");
+        hc05_print_current_settings();
+
+        print_current_settings();
+        logger_log_settings("HC05 language ENGLISH");
+    }
+    else if (str_equal(cmd, "DUTCH") || str_equal(cmd, "D"))
+    {
+        app_settings_set_language(APP_LANGUAGE_DUTCH);
+
+        hc05_print_to_usb("CMD DUTCH");
+        hc05_write_string("OK DUTCH\r\n");
+        hc05_print_current_settings();
+
+        print_current_settings();
+        logger_log_settings("HC05 language DUTCH");
+    }
+    else if (str_equal(cmd, "STATUS") || str_equal(cmd, "S"))
+    {
+        hc05_print_to_usb("CMD STATUS");
+
+        hc05_write_string("STATUS\r\n");
+        hc05_print_current_settings();
+
+        print_current_settings();
+        logger_log_settings("HC05 status requested");
+    }
+    else
+    {
+        /*
+         * Keep old single-character commands too:
+         * r/g/b/y, u/n/m/j/k, 0-9, *, #, x, etc.
+         */
+        if ((cmd[0] != '\0') && (cmd[1] == '\0'))
+        {
+            process_command_char(cmd[0], true);
+            return;
+        }
+
+        hc05_print_to_usb("UNKNOWN COMMAND");
+        hc05_write_string("ERR UNKNOWN\r\n");
+    }
+
+    send_event(event);
+}
+
+static void handle_serial_input(void)
+{
     while (serial_rxcnt() > 0u)
     {
         int ch = serial_getchar();
 
-        event.type = EVENT_NONE;
-        event.keypad_key = '\0';
-        event.rssi = 0;
-
-        /*
-         * Time sync command.
-         *
-         * Send from PC/app:
-         * T2026-05-27 14:30:00
-         *
-         * Or Unix seconds:
-         * TU1716810000
-         */
         if (handle_time_command_char(ch))
         {
             continue;
         }
 
-        /*
-         * Ignore line endings completely.
-         * This removes RX: \r, RX: \n, INPUT: \r, INPUT: \n.
-         */
-        if (ch == '\r' || ch == '\n')
+        process_command_char((char)ch, false);
+    }
+}
+
+static void handle_hc05_input(void)
+{
+#if APP_BT_ENABLED
+    char ch;
+
+    while (hc05_getchar(&ch))
+    {
+        if ((ch == '\r') || (ch == '\n'))
         {
+            if (hc05_command_index > 0u)
+            {
+                hc05_command_buffer[hc05_command_index] = '\0';
+                process_hc05_command(hc05_command_buffer);
+                hc05_command_index = 0u;
+            }
+
             continue;
         }
 
-        logger_log_input_char((char)ch);
-
-        /*
-         * Runtime settings:
-         *
-         * E = easy difficulty
-         * H = hard difficulty
-         * P = English language
-         * D = Dutch language
-         * S = show current settings
-         */
-        if (ch == 'E')
+        if (hc05_command_index < (HC05_COMMAND_BUFFER_SIZE - 1u))
         {
-            app_settings_set_difficulty(APP_DIFFICULTY_EASY);
-            print_serial("Difficulty set to EASY\r\n");
-            logger_log_settings("Difficulty set to EASY");
-            print_current_settings();
-        }
-        else if (ch == 'H')
-        {
-            app_settings_set_difficulty(APP_DIFFICULTY_HARD);
-            print_serial("Difficulty set to HARD\r\n");
-            logger_log_settings("Difficulty set to HARD");
-            print_current_settings();
-        }
-        else if (ch == 'P')
-        {
-            app_settings_set_language(APP_LANGUAGE_ENGLISH);
-            print_serial("Language set to ENGLISH\r\n");
-            logger_log_settings("Language set to ENGLISH");
-            print_current_settings();
-        }
-        else if (ch == 'D')
-        {
-            app_settings_set_language(APP_LANGUAGE_DUTCH);
-            print_serial("Language set to DUTCH\r\n");
-            logger_log_settings("Language set to DUTCH");
-            print_current_settings();
-        }
-        else if (ch == 'S')
-        {
-            print_current_settings();
-            logger_log_settings("Settings printed");
-        }
-
-        /*
-         * Keypad fallback through serial:
-         * 0-9, *, #
-         */
-        else if ((ch >= '0' && ch <= '9') || ch == '*' || ch == '#')
-        {
-            event.type = EVENT_KEYPAD_KEY;
-            event.keypad_key = (char)ch;
-        }
-
-        /*
-         * Fake beacon/location events:
-         *
-         * u = location 1
-         * n = location 2
-         * m = location 3
-         * j = location 4
-         * k = location 5
-         */
-        else if (ch == 'u')
-        {
-            event.type = EVENT_BEACON_1_DETECTED;
-        }
-        else if (ch == 'n')
-        {
-            event.type = EVENT_BEACON_2_DETECTED;
-        }
-        else if (ch == 'm')
-        {
-            event.type = EVENT_BEACON_3_DETECTED;
-        }
-        else if (ch == 'j')
-        {
-            event.type = EVENT_BEACON_4_DETECTED;
-        }
-        else if (ch == 'k')
-        {
-            event.type = EVENT_BEACON_5_DETECTED;
-        }
-
-        /*
-         * Fake colored button events:
-         *
-         * r = red
-         * g = green
-         * b = blue
-         * y = yellow
-         */
-        else if (ch == 'r')
-        {
-            event.type = EVENT_BUTTON_RED;
-        }
-        else if (ch == 'g')
-        {
-            event.type = EVENT_BUTTON_GREEN;
-        }
-        else if (ch == 'b')
-        {
-            event.type = EVENT_BUTTON_BLUE;
-        }
-        else if (ch == 'y')
-        {
-            event.type = EVENT_BUTTON_YELLOW;
-        }
-
-        /*
-         * Reset:
-         * x = reset
-         */
-        else if (ch == 'x')
-        {
-            logger_log("SYSTEM", "Reset requested");
-            event.type = EVENT_RESET_REQUEST;
+            hc05_command_buffer[hc05_command_index++] = ch;
         }
         else
         {
-            print_serial("Ignored serial input\r\n");
-            logger_log("INPUT", "Ignored serial input");
-        }
-
-        if (event.type != EVENT_NONE)
-        {
-            send_event(event);
+            hc05_command_index = 0u;
+            hc05_write_string("ERR CMD TOO LONG\r\n");
+            print_serial("HC05: command too long\r\n");
         }
     }
+#endif
 }
 
 static void handle_keypad_input(void)
@@ -546,10 +734,6 @@ void app_init(void)
 
     hal_init();
 
-    /*
-     * Start the puzzle box before logger_init().
-     * This prevents bad/missing SD from stopping startup messages.
-     */
     fsm_init();
 
     print_current_settings();
@@ -579,6 +763,7 @@ void app_update(void)
     handle_serial_input();
     handle_button_input();
     handle_bt_input();
+    handle_hc05_input();
 
     fsm_update();
 }

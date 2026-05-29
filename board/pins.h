@@ -6,14 +6,11 @@
  * MoiBox pin map - FRDM-MCXA153
  * ============================================================
  *
- * This file is a central reference for all project pins.
+ * Current important serial split:
  *
- * Current pin plan has no direct GPIO conflicts:
- *
- * P0: USB debug serial only
- * P1: SD + BT + colored buttons + some map LEDs
- * P2: keypad + lock + some map LEDs
- * P3: OLED + map LEDs + optional buzzer
+ * LPUART0 -> USB serial monitor / MCU-Link
+ * LPUART1 -> HM-10 BLE / iBeacon scanner
+ * LPUART2 -> HC-05 app Bluetooth
  */
 
 /*
@@ -44,9 +41,6 @@
  * HW-125 SCK  -> P1_1 / LPSPI0_SCK
  * HW-125 MISO -> P1_2 / LPSPI0_SDI
  * HW-125 CS   -> P1_3 / manual GPIO CS
- *
- * HW-125 VCC  -> 3.3V recommended for your current setup
- * HW-125 GND  -> GND
  */
 
 #define PIN_SD_MOSI_PORT_NUMBER 1u
@@ -63,25 +57,39 @@
 
 /*
  * ============================================================
- * BLUETOOTH / HM-10
+ * BLUETOOTH MODULES
  * ============================================================
  *
- * Uses LPUART2.
+ * HM-10:
+ * Used for BLE / iBeacon scanning.
+ * Uses LPUART1.
  *
- * HM-10 TXD -> P1_4 / LPUART2_RX
- * HM-10 RXD -> P1_5 / LPUART2_TX
+ * HM-10 TXD -> P3_8 / LPUART1_RXD
+ * HM-10 RXD -> P3_9 / LPUART1_TXD
  * HM-10 VCC -> 3.3V
  * HM-10 GND -> GND
  *
- * Current code uses BT_PIN_MUX = 2.
- * If HM-10 still does not respond, test MUX 3 and baud 115200.
+ * HC-05:
+ * Used for phone/app serial communication.
+ * Uses LPUART2.
+ *
+ * HC-05 TXD -> P1_4 / LPUART2_RXD
+ * HC-05 RXD -> P1_5 / LPUART2_TXD
+ * HC-05 VCC -> 5V 
+ * HC-05 GND -> GND
  */
 
-#define PIN_BT_UART_RX_PORT_NUMBER 1u
-#define PIN_BT_UART_RX_PIN         4u
+#define PIN_HM10_UART_RX_PORT_NUMBER 3u
+#define PIN_HM10_UART_RX_PIN         8u
 
-#define PIN_BT_UART_TX_PORT_NUMBER 1u
-#define PIN_BT_UART_TX_PIN         5u
+#define PIN_HM10_UART_TX_PORT_NUMBER 3u
+#define PIN_HM10_UART_TX_PIN         9u
+
+#define PIN_HC05_UART_RX_PORT_NUMBER 1u
+#define PIN_HC05_UART_RX_PIN         4u
+
+#define PIN_HC05_UART_TX_PORT_NUMBER 1u
+#define PIN_HC05_UART_TX_PIN         5u
 
 /*
  * ============================================================
@@ -171,8 +179,6 @@
  *
  * OLED SCL -> P3_27 / LPI2C0_SCL
  * OLED SDA -> P3_28 / LPI2C0_SDA
- * OLED VCC -> 3.3V
- * OLED GND -> GND
  */
 
 #define PIN_OLED_SCL_PORT_NUMBER 3u
@@ -183,7 +189,7 @@
 
 /*
  * ============================================================
- * LOCATION RGB MAP LEDs
+ * LOCATION RGB MAP LEDS
  * ============================================================
  *
  * Your RGB LEDs currently use only RED and GREEN channels.
@@ -191,8 +197,6 @@
  * red    = red channel ON
  * green  = green channel ON
  * yellow = red + green ON
- *
- * Common GND, active-high outputs.
  */
 
 /* RGB location 1 */
@@ -232,26 +236,21 @@
 
 /*
  * ============================================================
- * OPTIONAL / FUTURE: 4 NORMAL COLORED LEDS
+ * 4 NORMAL COLORED LEDS
  * ============================================================
  *
- * These were listed earlier for puzzle 4/5 feedback.
- * They are NOT clearly implemented in the current pasted code.
+ * These are real LEDs, not optional.
  *
- * Previous candidate mapping:
+ * Old:
+ * Green  -> P3_6
+ * Blue   -> P3_7
+ * Yellow -> P3_8
+ * Red    -> P3_9
  *
- * RED normal LED    -> P3_9
- * GREEN normal LED  -> P3_6
- * BLUE normal LED   -> P3_7
- * YELLOW normal LED -> P3_8
- *
- * WARNING:
- * P3_6 was also suggested by an older buzzer branch.
- * Do not use P3_6 for both normal green LED and buzzer.
+ * New:
+ * P3_8/P3_9 are used by HM-10 LPUART1.
+ * Yellow and Red were moved.
  */
-
-#define PIN_NORMAL_LED_RED_PORT_NUMBER    3u
-#define PIN_NORMAL_LED_RED_PIN            9u
 
 #define PIN_NORMAL_LED_GREEN_PORT_NUMBER  3u
 #define PIN_NORMAL_LED_GREEN_PIN          6u
@@ -260,21 +259,22 @@
 #define PIN_NORMAL_LED_BLUE_PIN           7u
 
 #define PIN_NORMAL_LED_YELLOW_PORT_NUMBER 3u
-#define PIN_NORMAL_LED_YELLOW_PIN         8u
+#define PIN_NORMAL_LED_YELLOW_PIN         30u
+
+#define PIN_NORMAL_LED_RED_PORT_NUMBER    1u
+#define PIN_NORMAL_LED_RED_PIN            12u
 
 /*
  * ============================================================
  * BUZZER
  * ============================================================
  *
- * Current buzzer.c uses P3_5 but BUZZER_ENABLED is 0.
- *
- * Use P3_5 if available.
- * Do NOT use P3_6 if you also use the normal green LED above.
+ * P3_5 is not available on the FRDM-MCXA153 header map.
+ * Use P3_31.
  */
 
 #define PIN_BUZZER_PORT_NUMBER 3u
-#define PIN_BUZZER_PIN         5u
+#define PIN_BUZZER_PIN         31u
 
 /*
  * ============================================================
@@ -287,8 +287,6 @@
  * P2_8
  * P2_9
  * P2_11
- *
- * Check board headers before using other pins.
  */
 
 /*
@@ -305,14 +303,15 @@
  * P1_1  = SD SCK
  * P1_2  = SD MISO
  * P1_3  = SD CS
- * P1_4  = BT RX
- * P1_5  = BT TX
+ * P1_4  = HC-05 RX / LPUART2_RXD
+ * P1_5  = HC-05 TX / LPUART2_TXD
  * P1_6  = yellow button
  * P1_7  = blue button
  * P1_8  = green button
  * P1_9  = red button
  * P1_10 = RGB4 red
  * P1_11 = RGB4 green
+ * P1_12 = normal red LED
  * P1_13 = RGB5 red
  *
  * PORT2:
@@ -329,17 +328,18 @@
  *
  * PORT3:
  * P3_0  = RGB5 green
- * P3_5  = buzzer
- * P3_6  = optional normal green LED
- * P3_7  = optional normal blue LED
- * P3_8  = optional normal yellow LED
- * P3_9  = optional normal red LED
+ * P3_6  = normal green LED
+ * P3_7  = normal blue LED
+ * P3_8  = HM-10 RX / LPUART1_RXD
+ * P3_9  = HM-10 TX / LPUART1_TXD
  * P3_10 = RGB1 red
  * P3_11 = RGB1 green
  * P3_13 = RGB2 red
  * P3_14 = RGB2 green
  * P3_27 = OLED SCL
  * P3_28 = OLED SDA
+ * P3_30 = normal yellow LED
+ * P3_31 = buzzer
  */
 
 #endif

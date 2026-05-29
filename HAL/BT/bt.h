@@ -18,7 +18,6 @@ uint16_t bt_get_expected_minor_for_puzzle(uint8_t puzzle_number);
 
 void bt_debug_simulate_minor(uint16_t minor);
 
-
 void bt_set_scanning_enabled(bool enabled);
 bool bt_is_scanning_enabled(void);
 

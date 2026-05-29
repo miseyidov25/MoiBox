@@ -37,7 +37,7 @@ static uint8_t input_index = 0u;
  * COLOR_BLUE
  * COLOR_YELLOW
  */
-static uint8_t correct_color = COLOR_BLUE;
+static uint8_t correct_color = COLOR_RED;
 
 static const char *color_words_english[] =
 {

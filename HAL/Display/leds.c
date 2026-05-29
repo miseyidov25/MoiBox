@@ -5,7 +5,9 @@
 #include <stdbool.h>
 
 /*
- * Location RGB LEDs:
+ * ============================================================
+ * LOCATION RGB MAP LEDS
+ * ============================================================
  *
  * RGB1 RED   -> P3_10
  * RGB1 GREEN -> P3_11
@@ -31,6 +33,24 @@
  * BLINKING = current/target location
  */
 
+/*
+ * ============================================================
+ * NORMAL COLORED LEDS
+ * ============================================================
+ *
+ * These were moved because P3_8/P3_9 are now used by HM-10:
+ *
+ * HM-10 LPUART1 RX -> P3_8
+ * HM-10 LPUART1 TX -> P3_9
+ *
+ * Normal LEDs now:
+ *
+ * Green  -> P3_6
+ * Blue   -> P3_7
+ * Yellow -> P3_30
+ * Red    -> P1_12
+ */
+
 typedef struct
 {
     GPIO_Type *gpio_red;
@@ -42,6 +62,13 @@ typedef struct
     uint32_t pin_green;
 } rgb_led_t;
 
+typedef struct
+{
+    GPIO_Type *gpio;
+    PORT_Type *port;
+    uint32_t pin;
+} normal_led_t;
+
 static const rgb_led_t location_leds[5] =
 {
     { GPIO3, PORT3, 10u, GPIO3, PORT3, 11u },
@@ -49,6 +76,26 @@ static const rgb_led_t location_leds[5] =
     { GPIO2, PORT2, 12u, GPIO2, PORT2, 13u },
     { GPIO1, PORT1, 10u, GPIO1, PORT1, 11u },
     { GPIO1, PORT1, 13u, GPIO3, PORT3, 0u  }
+};
+
+static const normal_led_t normal_red_led =
+{
+    GPIO1, PORT1, 12u
+};
+
+static const normal_led_t normal_green_led =
+{
+    GPIO3, PORT3, 6u
+};
+
+static const normal_led_t normal_blue_led =
+{
+    GPIO3, PORT3, 7u
+};
+
+static const normal_led_t normal_yellow_led =
+{
+    GPIO3, PORT3, 30u
 };
 
 static uint32_t last_ms = 0u;
@@ -131,6 +178,11 @@ static void pin_write(GPIO_Type *gpio, uint32_t pin, bool on)
     }
 }
 
+static void pin_toggle(GPIO_Type *gpio, uint32_t pin)
+{
+    gpio->PTOR = (1u << pin);
+}
+
 static void rgb_set(uint8_t index, bool red, bool green)
 {
     if (index >= 5u)
@@ -162,6 +214,26 @@ static void rgb_off(uint8_t index)
     rgb_set(index, false, false);
 }
 
+static void normal_led_write(const normal_led_t *led, bool on)
+{
+    if (led == 0)
+    {
+        return;
+    }
+
+    pin_write(led->gpio, led->pin, on);
+}
+
+static void normal_led_toggle(const normal_led_t *led)
+{
+    if (led == 0)
+    {
+        return;
+    }
+
+    pin_toggle(led->gpio, led->pin);
+}
+
 static void show_normal_map(void)
 {
     uint8_t current_index;
@@ -181,7 +253,6 @@ static void show_normal_map(void)
         }
         else if (i == current_index)
         {
-  
             if (blink_on)
             {
                 rgb_yellow(i);
@@ -249,6 +320,16 @@ void leds_init(void)
 
         rgb_red(i);
     }
+
+    /*
+     * Configure the 4 normal colored LEDs in the same file.
+     */
+    configure_output(normal_red_led.gpio, normal_red_led.port, normal_red_led.pin);
+    configure_output(normal_green_led.gpio, normal_green_led.port, normal_green_led.pin);
+    configure_output(normal_blue_led.gpio, normal_blue_led.port, normal_blue_led.pin);
+    configure_output(normal_yellow_led.gpio, normal_yellow_led.port, normal_yellow_led.pin);
+
+    leds_normal_all_off();
 }
 
 void leds_update(uint32_t current_ms)
@@ -320,4 +401,117 @@ void leds_set_wrong_location_flash(uint8_t puzzle_number)
 
     wrong_flash_puzzle_number = puzzle_number;
     wrong_flash_until_ms = last_ms + 2000u;
+}
+
+/*
+ * ============================================================
+ * NORMAL COLORED LED API
+ * ============================================================
+ */
+
+void leds_normal_all_off(void)
+{
+    leds_normal_red_off();
+    leds_normal_green_off();
+    leds_normal_blue_off();
+    leds_normal_yellow_off();
+}
+
+void leds_normal_red_on(void)
+{
+    normal_led_write(&normal_red_led, true);
+}
+
+void leds_normal_green_on(void)
+{
+    normal_led_write(&normal_green_led, true);
+}
+
+void leds_normal_blue_on(void)
+{
+    normal_led_write(&normal_blue_led, true);
+}
+
+void leds_normal_yellow_on(void)
+{
+    normal_led_write(&normal_yellow_led, true);
+}
+
+void leds_normal_red_off(void)
+{
+    normal_led_write(&normal_red_led, false);
+}
+
+void leds_normal_green_off(void)
+{
+    normal_led_write(&normal_green_led, false);
+}
+
+void leds_normal_blue_off(void)
+{
+    normal_led_write(&normal_blue_led, false);
+}
+
+void leds_normal_yellow_off(void)
+{
+    normal_led_write(&normal_yellow_led, false);
+}
+
+void leds_normal_red_toggle(void)
+{
+    normal_led_toggle(&normal_red_led);
+}
+
+void leds_normal_green_toggle(void)
+{
+    normal_led_toggle(&normal_green_led);
+}
+
+void leds_normal_blue_toggle(void)
+{
+    normal_led_toggle(&normal_blue_led);
+}
+
+void leds_normal_yellow_toggle(void)
+{
+    normal_led_toggle(&normal_yellow_led);
+}
+
+void leds_normal_set(uint8_t red, uint8_t green, uint8_t blue, uint8_t yellow)
+{
+    if (red != 0u)
+    {
+        leds_normal_red_on();
+    }
+    else
+    {
+        leds_normal_red_off();
+    }
+
+    if (green != 0u)
+    {
+        leds_normal_green_on();
+    }
+    else
+    {
+        leds_normal_green_off();
+    }
+
+    if (blue != 0u)
+    {
+        leds_normal_blue_on();
+    }
+    else
+    {
+        leds_normal_blue_off();
+    }
+
+    if (yellow != 0u)
+    {
+        leds_normal_yellow_on();
+    }
+    else
+    {
+        leds_normal_yellow_off();
+    }
 }
