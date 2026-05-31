@@ -3,10 +3,13 @@
 #include "Puzzles/puzzle2_morsecode.h"
 
 #include "App/settings.h"
+#include "App/app.h"
 
 #include "serial.h"
 #include "HAL/Display/oled.h"
 #include "HAL/Audio/buzzer.h"
+
+#include <MCXA153.h>
 
 #define NUMBER_CODE_LENGTH 3u
 #define MORSE_TEXT_MAX     32u
@@ -21,23 +24,13 @@ static uint8_t clue_played = 0u;
 
 static char morse_text[MORSE_TEXT_MAX];
 
-static const char number_code[NUMBER_CODE_LENGTH + 1u] =
-{
-    '7', '0', '5', '\0'
-};
+static char number_code[NUMBER_CODE_LENGTH + 1u];
 
 static char input[NUMBER_CODE_LENGTH + 1u];
 static uint8_t input_index = 0u;
 
-/*
- * Easy mode answer.
- *
- * COLOR_RED
- * COLOR_GREEN
- * COLOR_BLUE
- * COLOR_YELLOW
- */
 static uint8_t correct_color = COLOR_RED;
+static uint32_t random_seed = 1u;
 
 static const char *color_words_english[] =
 {
@@ -63,9 +56,38 @@ static void print_serial(const char *s)
     }
 }
 
+static uint32_t random_next(void)
+{
+    random_seed = (random_seed * 1103515245u) + 12345u;
+    return random_seed;
+}
+
+static void random_init(void)
+{
+    random_seed = app_millis() ^ SysTick->VAL;
+
+    if (random_seed == 0u)
+    {
+        random_seed = 1u;
+    }
+}
+
+static void generate_random_color(void)
+{
+    correct_color = (uint8_t)(random_next() % 4u);
+}
+
+static void generate_random_number_code(void)
+{
+    number_code[0] = (char)('1' + (random_next() % 9u));
+    number_code[1] = (char)('0' + (random_next() % 10u));
+    number_code[2] = (char)('0' + (random_next() % 10u));
+    number_code[3] = '\0';
+}
+
 static const char *morse_for_char(char c)
 {
-    if (c >= 'a' && c <= 'z')
+    if ((c >= 'a') && (c <= 'z'))
     {
         c = (char)(c - 'a' + 'A');
     }
@@ -118,7 +140,7 @@ static void append_char_to_morse(char c)
 {
     uint8_t i = 0u;
 
-    while (morse_text[i] != '\0' && i < (MORSE_TEXT_MAX - 1u))
+    while ((morse_text[i] != '\0') && (i < (MORSE_TEXT_MAX - 1u)))
     {
         i++;
     }
@@ -203,14 +225,14 @@ static void show_current_clue(void)
         {
             oled_display_string(0, 0, "PUZZEL 2");
             oled_display_string(1, 0, "Morse kleur");
-            oled_display_string(2, 0, morse_text);
+            oled_display_string(2, 0, "Luister goed");
             oled_display_string(3, 0, "Druk kleur");
         }
         else
         {
             oled_display_string(0, 0, "PUZZLE 2");
             oled_display_string(1, 0, "Morse color");
-            oled_display_string(2, 0, morse_text);
+            oled_display_string(2, 0, "Listen carefully");
             oled_display_string(3, 0, "Press color");
         }
 
@@ -232,14 +254,14 @@ static void show_current_clue(void)
         {
             oled_display_string(0, 0, "PUZZEL 2");
             oled_display_string(1, 0, "Morse nummer");
-            oled_display_string(2, 0, morse_text);
+            oled_display_string(2, 0, "Luister goed");
             oled_display_string(3, 0, "Voer in + #");
         }
         else
         {
             oled_display_string(0, 0, "PUZZLE 2");
             oled_display_string(1, 0, "Morse number");
-            oled_display_string(2, 0, morse_text);
+            oled_display_string(2, 0, "Listen carefully");
             oled_display_string(3, 0, "Enter + #");
         }
 
@@ -271,6 +293,10 @@ void puzzle2_morsecode_start(void)
     clue_played = 0u;
     reset_input();
 
+    random_init();
+    generate_random_color();
+    generate_random_number_code();
+
     print_serial("\r\n========== PUZZLE 2: MORSE ==========\r\n");
 
     print_serial("Difficulty: ");
@@ -285,12 +311,12 @@ void puzzle2_morsecode_start(void)
     {
         if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
         {
-            print_serial("Lees/luister naar Morse, druk de juiste kleur.\r\n");
+            print_serial("Luister naar Morse en druk de juiste kleur.\r\n");
             print_serial("Druk # om opnieuw af te spelen.\r\n");
         }
         else
         {
-            print_serial("Read/listen to Morse, press matching color button.\r\n");
+            print_serial("Listen to Morse and press matching color button.\r\n");
             print_serial("Press # to replay.\r\n");
         }
     }
@@ -298,13 +324,13 @@ void puzzle2_morsecode_start(void)
     {
         if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
         {
-            print_serial("Lees/luister naar Morse, voer 3 cijfers in, druk #.\r\n");
+            print_serial("Luister naar Morse, voer 3 cijfers in, druk #.\r\n");
             print_serial("Druk # met lege invoer om opnieuw af te spelen.\r\n");
             print_serial("Input: ");
         }
         else
         {
-            print_serial("Read/listen to Morse, enter 3 digits, press #.\r\n");
+            print_serial("Listen to Morse, enter 3 digits, press #.\r\n");
             print_serial("Press # with empty input to replay.\r\n");
             print_serial("Input: ");
         }
@@ -427,7 +453,7 @@ void puzzle2_morsecode_handle_key(char key)
         return;
     }
 
-    if (key < '0' || key > '9')
+    if ((key < '0') || (key > '9'))
     {
         return;
     }
@@ -453,9 +479,6 @@ void puzzle2_morsecode_handle_button(uint8_t button)
 
     if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
     {
-        /*
-         * Hard mode uses keypad number input, not color buttons.
-         */
         (void)button;
         return;
     }
@@ -484,11 +507,11 @@ void puzzle2_morsecode_handle_button(uint8_t button)
     {
         if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
         {
-            print_serial("Foute kleur. Lees/luister opnieuw.\r\n");
+            print_serial("Foute kleur. Luister opnieuw.\r\n");
         }
         else
         {
-            print_serial("Wrong color. Listen/read again.\r\n");
+            print_serial("Wrong color. Listen again.\r\n");
         }
 
         buzzer_fail();

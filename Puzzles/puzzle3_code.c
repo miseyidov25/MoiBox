@@ -1,37 +1,29 @@
 #include "Puzzles/puzzle3_code.h"
 
 #include "App/settings.h"
+#include "App/app.h"
 
 #include "serial.h"
 #include "HAL/Display/oled.h"
 
+#include <MCXA153.h>
+#include <stdint.h>
+
 #define EASY_CODE_LENGTH 7
-#define MAX_INPUT_LENGTH 9
+#define HARD_SEQUENCE_VISIBLE_COUNT 7
+#define MAX_INPUT_LENGTH 12
 
-static const char easy_code[EASY_CODE_LENGTH + 1] =
-{
-    '1','3','4','6','7','9','1','\0'
-};
+static char easy_code[EASY_CODE_LENGTH + 1];
 
-/*
- * Hard mode:
- * User sees the first 7 numbers and must enter the 8th.
- *
- * 2, 4, 8, 16, 32, 64, 128, ?
- *
- * Correct answer = 256
- */
-static const int hard_sequence[7] =
-{
-    2, 4, 8, 16, 32, 64, 128
-};
-
-static const int hard_answer = 256;
+static int hard_sequence[HARD_SEQUENCE_VISIBLE_COUNT];
+static int hard_answer = 0;
 
 static char user_input[MAX_INPUT_LENGTH + 1];
 static int input_index = 0;
 
 static puzzle_status_t status = PUZZLE_STATUS_RUNNING;
+
+static uint32_t random_seed = 1u;
 
 static void print_serial(const char *s)
 {
@@ -58,7 +50,7 @@ static void print_int(int value)
         value = -value;
     }
 
-    while (value > 0 && index < 11)
+    while ((value > 0) && (index < 11))
     {
         buffer[index++] = (char)('0' + (value % 10));
         value /= 10;
@@ -70,9 +62,64 @@ static void print_int(int value)
     }
 }
 
+static void int_to_string(int value, char *buffer)
+{
+    char temp[12];
+    int index = 0;
+    int out = 0;
+
+    if (value == 0)
+    {
+        buffer[0] = '0';
+        buffer[1] = '\0';
+        return;
+    }
+
+    if (value < 0)
+    {
+        buffer[out++] = '-';
+        value = -value;
+    }
+
+    while ((value > 0) && (index < 11))
+    {
+        temp[index++] = (char)('0' + (value % 10));
+        value /= 10;
+    }
+
+    while (index > 0)
+    {
+        buffer[out++] = temp[--index];
+    }
+
+    buffer[out] = '\0';
+}
+
 static int is_dutch(void)
 {
     return app_settings_get_language() == APP_LANGUAGE_DUTCH;
+}
+
+static uint32_t random_next(void)
+{
+    random_seed = (random_seed * 1103515245u) + 12345u;
+    return random_seed;
+}
+
+static void random_init(void)
+{
+    random_seed = app_millis() ^ SysTick->VAL;
+
+    if (random_seed == 0u)
+    {
+        random_seed = 1u;
+    }
+}
+
+static int random_range_int(int min_value, int max_value)
+{
+    uint32_t range = (uint32_t)(max_value - min_value + 1);
+    return min_value + (int)(random_next() % range);
 }
 
 static void reset_input(void)
@@ -96,16 +143,57 @@ static int string_to_int(const char *s)
 
     while (*s)
     {
-        if (*s < '0' || *s > '9')
+        if ((*s < '0') || (*s > '9'))
         {
             return -1;
         }
 
-        value = value * 10 + (*s - '0');
+        value = (value * 10) + (*s - '0');
         s++;
     }
 
     return value;
+}
+
+static void generate_easy_code(void)
+{
+    /*
+     * Random 7-digit numeric code.
+     *
+     * First digit is 1-9 so the code does not start with 0.
+     * Other digits can be 0-9.
+     */
+    easy_code[0] = (char)('1' + (random_next() % 9u));
+
+    for (int i = 1; i < EASY_CODE_LENGTH; i++)
+    {
+        easy_code[i] = (char)('0' + (random_next() % 10u));
+    }
+
+    easy_code[EASY_CODE_LENGTH] = '\0';
+}
+
+static void generate_hard_sequence(void)
+{
+    /*
+     * Random arithmetic sequence:
+     *
+     * Example:
+     * start = 3
+     * step  = 3
+     *
+     * 3, 6, 9, 12, 15, 18, 21, ?
+     * answer = 24
+     */
+    int start = random_range_int(2, 12);
+    int step = random_range_int(2, 9);
+
+    for (int i = 0; i < HARD_SEQUENCE_VISIBLE_COUNT; i++)
+    {
+        hard_sequence[i] = start + (step * i);
+    }
+
+    hard_answer = start + (step * HARD_SEQUENCE_VISIBLE_COUNT);
 }
 
 static int easy_code_is_correct(void)
@@ -123,21 +211,80 @@ static int easy_code_is_correct(void)
 
 static void print_hard_sequence(void)
 {
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < HARD_SEQUENCE_VISIBLE_COUNT; i++)
     {
         print_int(hard_sequence[i]);
 
-        if (i < 6)
+        if (i < (HARD_SEQUENCE_VISIBLE_COUNT - 1))
         {
             print_serial(", ");
         }
     }
 }
 
+static void show_hard_sequence_oled(void)
+{
+    char buffer1[32];
+    char buffer2[32];
+    char temp[12];
+    int pos;
+
+    buffer1[0] = '\0';
+    buffer2[0] = '\0';
+
+    pos = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        int_to_string(hard_sequence[i], temp);
+
+        int j = 0;
+        while ((temp[j] != '\0') && (pos < 30))
+        {
+            buffer1[pos++] = temp[j++];
+        }
+
+        if ((i < 3) && (pos < 30))
+        {
+            buffer1[pos++] = ' ';
+        }
+    }
+
+    buffer1[pos] = '\0';
+
+    pos = 0;
+    for (int i = 4; i < HARD_SEQUENCE_VISIBLE_COUNT; i++)
+    {
+        int_to_string(hard_sequence[i], temp);
+
+        int j = 0;
+        while ((temp[j] != '\0') && (pos < 30))
+        {
+            buffer2[pos++] = temp[j++];
+        }
+
+        if (pos < 30)
+        {
+            buffer2[pos++] = ' ';
+        }
+    }
+
+    if (pos < 30)
+    {
+        buffer2[pos++] = '?';
+    }
+
+    buffer2[pos] = '\0';
+
+    oled_display_string(2, 0, buffer1);
+    oled_display_string(3, 0, buffer2);
+}
+
 void puzzle3_code_start(void)
 {
     reset_input();
     status = PUZZLE_STATUS_RUNNING;
+
+    random_init();
 
     oled_clear();
 
@@ -153,32 +300,32 @@ void puzzle3_code_start(void)
 
     if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
     {
+        generate_hard_sequence();
+
         if (is_dutch())
         {
             oled_display_string(0, 0, "PUZZEL 3");
-            oled_display_string(1, 0, "Vind nummer 8");
-            oled_display_string(2, 0, "2 4 8 16");
-            oled_display_string(3, 0, "32 64 128 ?");
+            oled_display_string(1, 0, "Volgend nummer");
 
-            print_serial("Vind het 8e nummer in de reeks.\r\n");
+            print_serial("Vind het volgende nummer in de reeks.\r\n");
             print_serial("Reeks: ");
             print_hard_sequence();
-            print_serial("\r\n");
+            print_serial(", ?\r\n");
             print_serial("Voer het volgende nummer in en druk #.\r\n");
         }
         else
         {
             oled_display_string(0, 0, "PUZZLE 3");
-            oled_display_string(1, 0, "Find number 8");
-            oled_display_string(2, 0, "2 4 8 16");
-            oled_display_string(3, 0, "32 64 128 ?");
+            oled_display_string(1, 0, "Next number");
 
-            print_serial("Find the 8th number in the sequence.\r\n");
+            print_serial("Find the next number in the sequence.\r\n");
             print_serial("Sequence: ");
             print_hard_sequence();
-            print_serial("\r\n");
+            print_serial(", ?\r\n");
             print_serial("Enter the next number and press #.\r\n");
         }
+
+        show_hard_sequence_oled();
 
         print_serial("Debug answer: ");
         print_int(hard_answer);
@@ -186,28 +333,20 @@ void puzzle3_code_start(void)
     }
     else
     {
+        generate_easy_code();
+
         if (is_dutch())
         {
             oled_display_string(0, 0, "PUZZEL 3");
-            oled_display_string(1, 0, "Voer 7 cijfers");
-            oled_display_string(2, 0, "# invoer");
-            oled_display_string(3, 0, "* wissen");
-
-            print_serial("Voer de 7-cijferige code in.\r\n");
-            print_serial("# = INVOER\r\n");
-            print_serial("* = WISSEN\r\n");
+            oled_display_string(1, 0, "Voer code in");
         }
         else
         {
             oled_display_string(0, 0, "PUZZLE 3");
-            oled_display_string(1, 0, "Enter 7 digits");
-            oled_display_string(2, 0, "# enter");
-            oled_display_string(3, 0, "* delete");
-
-            print_serial("Enter the 7-digit code.\r\n");
-            print_serial("# = ENTER\r\n");
-            print_serial("* = BACKSPACE\r\n");
+            oled_display_string(1, 0, "Enter code");
         }
+
+        print_serial(is_dutch() ? "Voer de code in.\r\n" : "Enter the code.\r\n");
 
         print_serial("Debug code: ");
         print_serial(easy_code);
@@ -346,7 +485,7 @@ void puzzle3_code_handle_key(char key)
         return;
     }
 
-    if (key < '0' || key > '9')
+    if ((key < '0') || (key > '9'))
     {
         return;
     }

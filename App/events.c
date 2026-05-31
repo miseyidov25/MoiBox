@@ -17,6 +17,7 @@ static const char *eventEnumToText[] =
     "EVENT_BUTTON_BLUE",
     "EVENT_BUTTON_YELLOW",
 
+    "EVENT_SKIP_REQUEST",
     "EVENT_RESET_REQUEST"
 };
 
@@ -24,7 +25,7 @@ static const char *eventEnumToText[] =
 
 const char *event_to_string(app_event_type_t event)
 {
-    if ((int)event >= 0 && (unsigned int)event < NUM_EVENTS)
+    if (((int)event >= 0) && ((unsigned int)event < NUM_EVENTS))
     {
         return eventEnumToText[event];
     }

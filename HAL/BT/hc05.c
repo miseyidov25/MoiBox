@@ -16,10 +16,7 @@ void hc05_init(uint32_t baudrate)
 
 void hc05_update(void)
 {
-    /*
-     * Nothing needed here for now.
-     * RX/TX is interrupt-driven by lpuart2.c.
-     */
+
 }
 
 bool hc05_getchar(char *c)

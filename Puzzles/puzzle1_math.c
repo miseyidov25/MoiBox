@@ -1,29 +1,28 @@
-#include <MCXA153.h>
-#include <stdint.h>
-
 #include "Puzzles/puzzle1_math.h"
 
 #include "App/settings.h"
+#include "App/app.h"
 
 #include "serial.h"
 #include "HAL/Display/oled.h"
 
-#define MAX_INPUT 4
+#include <MCXA153.h>
+#include <stdint.h>
+
+#define MAX_INPUT_LENGTH 8
 
 static puzzle_status_t status = PUZZLE_STATUS_RUNNING;
 
-static char input[MAX_INPUT + 1];
+static int apple = 0;
+static int banana = 0;
+static int first_result = 0;
+static int second_result = 0;
+static int answer = 0;
+
+static char input[MAX_INPUT_LENGTH + 1];
 static int input_index = 0;
 
-static int apple_value = 0;
-static int banana_value = 0;
-static int x_value = 0;
-static int y_value = 0;
-static int correct_answer = 0;
-
-static char line1[32];
-static char line2[32];
-static char line3[32];
+static uint32_t random_seed = 1u;
 
 static void print_serial(const char *s)
 {
@@ -50,7 +49,7 @@ static void print_int(int value)
         value = -value;
     }
 
-    while (value > 0 && index < 11)
+    while ((value > 0) && (index < 11))
     {
         buffer[index++] = (char)('0' + (value % 10));
         value /= 10;
@@ -81,7 +80,7 @@ static void int_to_string(int value, char *buffer)
         value = -value;
     }
 
-    while (value > 0 && index < 11)
+    while ((value > 0) && (index < 11))
     {
         temp[index++] = (char)('0' + (value % 10));
         value /= 10;
@@ -95,109 +94,62 @@ static void int_to_string(int value, char *buffer)
     buffer[out] = '\0';
 }
 
-static void make_equation_line(char *buffer, const char *left, int result)
+static void append_string(char *dst, const char *src, uint32_t max_len)
 {
-    char result_text[12];
-    int i = 0;
-    int j = 0;
+    uint32_t i = 0u;
+    uint32_t j = 0u;
 
-    int_to_string(result, result_text);
-
-    while (left[i] != '\0')
+    while ((dst[i] != '\0') && (i < max_len))
     {
-        buffer[i] = left[i];
         i++;
     }
 
-    buffer[i++] = '=';
-
-    while (result_text[j] != '\0')
+    while ((src[j] != '\0') && (i < max_len))
     {
-        buffer[i++] = result_text[j++];
+        dst[i++] = src[j++];
     }
 
-    buffer[i] = '\0';
+    dst[i] = '\0';
 }
 
-static uint32_t randomish(void)
+static void append_int(char *dst, int value, uint32_t max_len)
 {
-    /*
-     * SysTick->VAL changes while the program is running.
-     * Good enough for puzzle variation.
-     */
-    return SysTick->VAL;
+    char number[12];
+
+    int_to_string(value, number);
+    append_string(dst, number, max_len);
 }
 
-static void generate_problem(void)
+static int is_dutch(void)
 {
-    uint32_t r = randomish();
+    return app_settings_get_language() == APP_LANGUAGE_DUTCH;
+}
 
-    apple_value = (int)((r % 9u) + 1u);
-    banana_value = (int)(((r >> 5u) % 9u) + 1u);
+static uint32_t random_next(void)
+{
+    random_seed = (random_seed * 1103515245u) + 12345u;
+    return random_seed;
+}
 
-    y_value = apple_value + apple_value;
+static void random_init(void)
+{
+    random_seed = app_millis() ^ SysTick->VAL;
 
-    if (app_settings_get_difficulty() == APP_DIFFICULTY_EASY)
+    if (random_seed == 0u)
     {
-        /*
-         * Easy:
-         * Banana + Apple = X
-         * Apple + Apple = Y
-         * X = ?
-         */
-        x_value = banana_value + apple_value;
+        random_seed = 1u;
     }
-    else
-    {
-        /*
-         * Hard:
-         * Banana * Apple = X
-         * Apple + Apple = Y
-         * X = ?
-         */
-        x_value = banana_value * apple_value;
-    }
+}
 
-    correct_answer = x_value;
-
-    if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
-    {
-        if (app_settings_get_difficulty() == APP_DIFFICULTY_EASY)
-        {
-            make_equation_line(line1, "Banaan+Appel", x_value);
-        }
-        else
-        {
-            make_equation_line(line1, "Banaan*Appel", x_value);
-        }
-
-        make_equation_line(line2, "Appel+Appel", y_value);
-    }
-    else
-    {
-        if (app_settings_get_difficulty() == APP_DIFFICULTY_EASY)
-        {
-            make_equation_line(line1, "Banana+Apple", x_value);
-        }
-        else
-        {
-            make_equation_line(line1, "Banana*Apple", x_value);
-        }
-
-        make_equation_line(line2, "Apple+Apple", y_value);
-    }
-
-    line3[0] = 'X';
-    line3[1] = ' ';
-    line3[2] = '=';
-    line3[3] = ' ';
-    line3[4] = '?';
-    line3[5] = '\0';
+static int random_range(int min_value, int max_value)
+{
+    uint32_t range = (uint32_t)(max_value - min_value + 1);
+    return min_value + (int)(random_next() % range);
 }
 
 static void reset_input(void)
 {
-    for (int i = 0; i <= MAX_INPUT; i++)
+    for (int i = 0; i <= MAX_INPUT_LENGTH; i++)
     {
         input[i] = 0;
     }
@@ -205,49 +157,175 @@ static void reset_input(void)
     input_index = 0;
 }
 
-static int string_to_int(const char *s)
+static int input_to_int(void)
 {
     int value = 0;
 
-    if (*s == 0)
+    if (input[0] == '\0')
     {
         return -1;
     }
 
-    while (*s)
+    for (int i = 0; input[i] != '\0'; i++)
     {
-        if (*s < '0' || *s > '9')
+        if ((input[i] < '0') || (input[i] > '9'))
         {
             return -1;
         }
 
-        value = value * 10 + (*s - '0');
-        s++;
+        value = (value * 10) + (input[i] - '0');
     }
 
     return value;
+}
+
+static void generate_problem(void)
+{
+    random_init();
+
+    apple = random_range(1, 9);
+    banana = random_range(1, 9);
+
+    second_result = apple + apple;
+
+    if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
+    {
+        first_result = banana * apple;
+    }
+    else
+    {
+        first_result = banana + apple;
+    }
+
+    answer = banana;
+}
+
+static void show_problem_oled(void)
+{
+    char line1[32];
+    char line2[32];
+
+    line1[0] = '\0';
+    line2[0] = '\0';
+
+    oled_clear();
+
+    if (is_dutch())
+    {
+        oled_display_string(0, 0, "PUZZEL 1");
+
+        append_string(line1, "BANAAN", 30u);
+
+        if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
+        {
+            append_string(line1, "xAPPEL=", 30u);
+        }
+        else
+        {
+            append_string(line1, "+APPEL=", 30u);
+        }
+
+        append_int(line1, first_result, 30u);
+
+        append_string(line2, "APPEL+APPEL=", 30u);
+        append_int(line2, second_result, 30u);
+
+        oled_display_string(1, 0, line1);
+        oled_display_string(2, 0, line2);
+        oled_display_string(3, 0, "BANAAN=?");
+    }
+    else
+    {
+        oled_display_string(0, 0, "PUZZLE 1");
+
+        append_string(line1, "BANANA", 30u);
+
+        if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
+        {
+            append_string(line1, "*APPLE=", 30u);
+        }
+        else
+        {
+            append_string(line1, "+APPLE=", 30u);
+        }
+
+        append_int(line1, first_result, 30u);
+
+        append_string(line2, "APPLE+APPLE=", 30u);
+        append_int(line2, second_result, 30u);
+
+        oled_display_string(1, 0, line1);
+        oled_display_string(2, 0, line2);
+        oled_display_string(3, 0, "BANANA=?");
+    }
+}
+
+static void print_problem_serial(void)
+{
+    if (is_dutch())
+    {
+        if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
+        {
+            print_serial("Banaan*Appel=");
+        }
+        else
+        {
+            print_serial("Banaan+Appel=");
+        }
+
+        print_int(first_result);
+        print_serial("\r\n");
+
+        print_serial("Appel+Appel=");
+        print_int(second_result);
+        print_serial("\r\n");
+
+        print_serial("Banaan = ?\r\n");
+    }
+    else
+    {
+        if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
+        {
+            print_serial("Banana*Apple=");
+        }
+        else
+        {
+            print_serial("Banana+Apple=");
+        }
+
+        print_int(first_result);
+        print_serial("\r\n");
+
+        print_serial("Apple+Apple=");
+        print_int(second_result);
+        print_serial("\r\n");
+
+        print_serial("Banana = ?\r\n");
+    }
+
+    print_serial("\r\nDebug values:\r\n");
+    print_serial("Apple = ");
+    print_int(apple);
+    print_serial("\r\n");
+
+    print_serial("Banana = ");
+    print_int(banana);
+    print_serial("\r\n");
+
+    print_serial("Answer = ");
+    print_int(answer);
+    print_serial("\r\n\r\n");
+
+    print_serial("# = enter, * = delete\r\n");
+    print_serial("Input: ");
 }
 
 void puzzle1_math_start(void)
 {
     status = PUZZLE_STATUS_RUNNING;
     reset_input();
+
     generate_problem();
-
-    oled_clear();
-
-    if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
-    {
-        oled_display_string(0, 0, "PUZZEL 1");
-    }
-    else
-    {
-        oled_display_string(0, 0, "PUZZLE 1");
-    }
-
-    oled_display_string(1, 0, line1);
-    oled_display_string(2, 0, line2);
-    oled_display_string(3, 0, line3);
 
     print_serial("\r\n========== PUZZLE 1: MATH ==========\r\n");
 
@@ -259,32 +337,8 @@ void puzzle1_math_start(void)
     print_serial(app_settings_language_to_string(app_settings_get_language()));
     print_serial("\r\n");
 
-    print_serial(line1);
-    print_serial("\r\n");
-    print_serial(line2);
-    print_serial("\r\n");
-    print_serial(line3);
-    print_serial("\r\n");
-
-    print_serial("\r\nDebug values:\r\n");
-    print_serial("Apple = ");
-    print_int(apple_value);
-    print_serial("\r\n");
-
-    print_serial("Banana = ");
-    print_int(banana_value);
-    print_serial("\r\n");
-
-    print_serial("X = ");
-    print_int(x_value);
-    print_serial("\r\n");
-
-    print_serial("Y = ");
-    print_int(y_value);
-    print_serial("\r\n");
-
-    print_serial("\r\n# = enter, * = delete\r\n");
-    print_serial("Input: ");
+    show_problem_oled();
+    print_problem_serial();
 }
 
 puzzle_status_t puzzle1_math_update(void)
@@ -294,6 +348,8 @@ puzzle_status_t puzzle1_math_update(void)
 
 void puzzle1_math_handle_key(char key)
 {
+    int user_answer;
+
     if (status == PUZZLE_STATUS_SOLVED)
     {
         return;
@@ -306,7 +362,7 @@ void puzzle1_math_handle_key(char key)
             input_index--;
             input[input_index] = 0;
 
-            if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
+            if (is_dutch())
             {
                 print_serial("\r\nVerwijderd\r\nInput: ");
             }
@@ -321,13 +377,13 @@ void puzzle1_math_handle_key(char key)
 
     if (key == '#')
     {
-        int answer = string_to_int(input);
-
         print_serial("\r\n");
 
-        if (answer == correct_answer)
+        user_answer = input_to_int();
+
+        if (user_answer == answer)
         {
-            if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
+            if (is_dutch())
             {
                 print_serial("Correct! Puzzel 1 opgelost.\r\n");
 
@@ -346,9 +402,9 @@ void puzzle1_math_handle_key(char key)
         }
         else
         {
-            if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
+            if (is_dutch())
             {
-                print_serial("Fout. Probeer opnieuw.\r\n");
+                print_serial("Fout antwoord. Probeer opnieuw.\r\n");
             }
             else
             {
@@ -362,16 +418,18 @@ void puzzle1_math_handle_key(char key)
         return;
     }
 
-    if (key < '0' || key > '9')
+    if ((key < '0') || (key > '9'))
     {
         return;
     }
 
-    if (input_index >= MAX_INPUT)
+    if (input_index >= MAX_INPUT_LENGTH)
     {
         return;
     }
 
     input[input_index++] = key;
+    input[input_index] = 0;
+
     serial_putchar(key);
 }

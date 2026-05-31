@@ -137,11 +137,9 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/App/settings.h"
 
 # ============================================================
-# BOARD
+# PINS
 # ============================================================
 
-"${ProjDirPath}/board/board.c"
-"${ProjDirPath}/board/board.h"
 "${ProjDirPath}/board/pins.h"
 
 # ============================================================
@@ -174,8 +172,6 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/HAL/BT/lpuart2.h"
 "${ProjDirPath}/HAL/BT/lpuart1.c"
 "${ProjDirPath}/HAL/BT/lpuart1.h"
-"${ProjDirPath}/HAL/BT/lpuart2.c"
-"${ProjDirPath}/HAL/BT/lpuart2.h"
 "${ProjDirPath}/HAL/BT/hc05.c"
 "${ProjDirPath}/HAL/BT/hc05.h"
 
@@ -213,13 +209,12 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/FatFs/lpspi_master.h"
 
 "${ProjDirPath}/FatFs/fatfs_time.c"
-"${ProjDirPath}/FatFS/ffunicode.c"
+# "${ProjDirPath}/FatFS/ffunicode.c"
 
 # ============================================================
 # PUZZLES
 # ============================================================
 
-"${ProjDirPath}/Puzzles/puzzle.c"
 "${ProjDirPath}/Puzzles/puzzle.h"
 
 "${ProjDirPath}/Puzzles/puzzle_handler.c"
