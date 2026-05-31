@@ -11,10 +11,6 @@ bool buttons_green_pressed(void);
 bool buttons_blue_pressed(void);
 bool buttons_yellow_pressed(void);
 
-/*
- * Compatibility with old button code.
- * Returns true if any color button has a pending press.
- */
 bool buttons_is_pressed(void);
 
 #endif
