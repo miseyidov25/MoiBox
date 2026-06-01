@@ -1,0 +1,8 @@
+C:/Users/hp/.vscode/MoiBox/FatFS/lpspi_master.c:58:6:lpspi_master_init	4	static
+C:/Users/hp/.vscode/MoiBox/FatFS/lpspi_master.c:145:6:lpspi_busy	4	static
+C:/Users/hp/.vscode/MoiBox/FatFS/lpspi_master.c:150:6:lpspi_transmit	24	static
+C:/Users/hp/.vscode/MoiBox/FatFS/lpspi_master.c:217:6:lpspi_receive	16	static
+C:/Users/hp/.vscode/MoiBox/FatFS/lpspi_master.c:222:6:lpspi_transceive	32	static
+C:/Users/hp/.vscode/MoiBox/FatFS/lpspi_master.c:317:6:lpspi_set_dummy	16	static
+C:/Users/hp/.vscode/MoiBox/FatFS/lpspi_master.c:322:13:lpspi0_txfifo_full	16	static
+C:/Users/hp/.vscode/MoiBox/FatFS/lpspi_master.c:332:13:lpspi0_rxfifo_empty	16	static

@@ -1,0 +1,17 @@
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:56:13:print_serial	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:64:12:is_dutch	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:69:16:sequence_length	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:79:17:random_next	4	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:85:16:random_button	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:90:13:generate_sequence	24	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:134:16:sequence_value	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:144:13:print_button_name	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:194:13:normal_led_on_for_button	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:216:13:start_button_feedback	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:224:13:print_sequence	24	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:248:13:show_oled_info	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:268:13:playback_restart	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:280:13:playback_update	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:342:6:puzzle4_sequence_start	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:375:17:puzzle4_sequence_update	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle4_sequence.c:381:6:puzzle4_sequence_handle_button	16	static

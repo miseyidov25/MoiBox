@@ -1,29 +1,46 @@
 #include "Puzzles/puzzle3_code.h"
 
 #include "App/settings.h"
-#include "App/app.h"
 
 #include "serial.h"
 #include "HAL/Display/oled.h"
 
-#include <MCXA153.h>
-#include <stdint.h>
+#define CODE_LENGTH       7
+#define MAX_INPUT_LENGTH  8
 
-#define EASY_CODE_LENGTH 7
-#define HARD_SEQUENCE_VISIBLE_COUNT 7
-#define MAX_INPUT_LENGTH 12
+/*
+ * One code/sequence for puzzle 3.
+ *
+ * 5 7 4 5 7 4 5
+ *
+ * Pattern:
+ * +2, -3, +1, +2, -3, +1
+ *
+ * Easy mode:
+ * Enter all page numbers as one code:
+ * 5745745
+ *
+ * Hard mode:
+ * Work out the next number:
+ * 5, 7, 4, 5, 7, 4, 5, ?
+ * Answer:
+ * 7
+ */
 
-static char easy_code[EASY_CODE_LENGTH + 1];
+static const char code_digits[CODE_LENGTH + 1] =
+{
+    '5', '7', '4', '5', '7', '4', '5', '\0'
+};
 
-static int hard_sequence[HARD_SEQUENCE_VISIBLE_COUNT];
-static int hard_answer = 0;
+static const char hard_answer[] =
+{
+    '7', '\0'
+};
 
 static char user_input[MAX_INPUT_LENGTH + 1];
-static int input_index = 0;
+static uint8_t input_index = 0u;
 
 static puzzle_status_t status = PUZZLE_STATUS_RUNNING;
-
-static uint32_t random_seed = 1u;
 
 static void print_serial(const char *s)
 {
@@ -33,250 +50,166 @@ static void print_serial(const char *s)
     }
 }
 
-static void print_int(int value)
-{
-    char buffer[12];
-    int index = 0;
-
-    if (value == 0)
-    {
-        serial_putchar('0');
-        return;
-    }
-
-    if (value < 0)
-    {
-        serial_putchar('-');
-        value = -value;
-    }
-
-    while ((value > 0) && (index < 11))
-    {
-        buffer[index++] = (char)('0' + (value % 10));
-        value /= 10;
-    }
-
-    while (index > 0)
-    {
-        serial_putchar(buffer[--index]);
-    }
-}
-
-static void int_to_string(int value, char *buffer)
-{
-    char temp[12];
-    int index = 0;
-    int out = 0;
-
-    if (value == 0)
-    {
-        buffer[0] = '0';
-        buffer[1] = '\0';
-        return;
-    }
-
-    if (value < 0)
-    {
-        buffer[out++] = '-';
-        value = -value;
-    }
-
-    while ((value > 0) && (index < 11))
-    {
-        temp[index++] = (char)('0' + (value % 10));
-        value /= 10;
-    }
-
-    while (index > 0)
-    {
-        buffer[out++] = temp[--index];
-    }
-
-    buffer[out] = '\0';
-}
-
 static int is_dutch(void)
 {
     return app_settings_get_language() == APP_LANGUAGE_DUTCH;
 }
 
-static uint32_t random_next(void)
-{
-    random_seed = (random_seed * 1103515245u) + 12345u;
-    return random_seed;
-}
-
-static void random_init(void)
-{
-    random_seed = app_millis() ^ SysTick->VAL;
-
-    if (random_seed == 0u)
-    {
-        random_seed = 1u;
-    }
-}
-
-static int random_range_int(int min_value, int max_value)
-{
-    uint32_t range = (uint32_t)(max_value - min_value + 1);
-    return min_value + (int)(random_next() % range);
-}
-
 static void reset_input(void)
 {
-    for (int i = 0; i <= MAX_INPUT_LENGTH; i++)
+    for (uint8_t i = 0u; i <= MAX_INPUT_LENGTH; i++)
     {
-        user_input[i] = 0;
+        user_input[i] = '\0';
     }
 
-    input_index = 0;
+    input_index = 0u;
 }
 
-static int string_to_int(const char *s)
+static int strings_equal(const char *a, const char *b)
 {
-    int value = 0;
-
-    if (*s == 0)
+    while ((*a != '\0') && (*b != '\0'))
     {
-        return -1;
-    }
-
-    while (*s)
-    {
-        if ((*s < '0') || (*s > '9'))
-        {
-            return -1;
-        }
-
-        value = (value * 10) + (*s - '0');
-        s++;
-    }
-
-    return value;
-}
-
-static void generate_easy_code(void)
-{
-    /*
-     * Random 7-digit numeric code.
-     *
-     * First digit is 1-9 so the code does not start with 0.
-     * Other digits can be 0-9.
-     */
-    easy_code[0] = (char)('1' + (random_next() % 9u));
-
-    for (int i = 1; i < EASY_CODE_LENGTH; i++)
-    {
-        easy_code[i] = (char)('0' + (random_next() % 10u));
-    }
-
-    easy_code[EASY_CODE_LENGTH] = '\0';
-}
-
-static void generate_hard_sequence(void)
-{
-    /*
-     * Random arithmetic sequence:
-     *
-     * Example:
-     * start = 3
-     * step  = 3
-     *
-     * 3, 6, 9, 12, 15, 18, 21, ?
-     * answer = 24
-     */
-    int start = random_range_int(2, 12);
-    int step = random_range_int(2, 9);
-
-    for (int i = 0; i < HARD_SEQUENCE_VISIBLE_COUNT; i++)
-    {
-        hard_sequence[i] = start + (step * i);
-    }
-
-    hard_answer = start + (step * HARD_SEQUENCE_VISIBLE_COUNT);
-}
-
-static int easy_code_is_correct(void)
-{
-    for (int i = 0; i < EASY_CODE_LENGTH; i++)
-    {
-        if (user_input[i] != easy_code[i])
+        if (*a != *b)
         {
             return 0;
         }
+
+        a++;
+        b++;
     }
 
-    return 1;
+    return ((*a == '\0') && (*b == '\0'));
 }
 
-static void print_hard_sequence(void)
+static void print_code_digits(void)
 {
-    for (int i = 0; i < HARD_SEQUENCE_VISIBLE_COUNT; i++)
+    for (uint8_t i = 0u; i < CODE_LENGTH; i++)
     {
-        print_int(hard_sequence[i]);
+        serial_putchar(code_digits[i]);
 
-        if (i < (HARD_SEQUENCE_VISIBLE_COUNT - 1))
+        if (i + 1u < CODE_LENGTH)
         {
-            print_serial(", ");
+            print_serial(" ");
         }
     }
 }
 
-static void show_hard_sequence_oled(void)
+static void show_easy(void)
 {
-    char buffer1[32];
-    char buffer2[32];
-    char temp[12];
-    int pos;
+    oled_clear();
 
-    buffer1[0] = '\0';
-    buffer2[0] = '\0';
-
-    pos = 0;
-    for (int i = 0; i < 4; i++)
+    if (is_dutch())
     {
-        int_to_string(hard_sequence[i], temp);
-
-        int j = 0;
-        while ((temp[j] != '\0') && (pos < 30))
-        {
-            buffer1[pos++] = temp[j++];
-        }
-
-        if ((i < 3) && (pos < 30))
-        {
-            buffer1[pos++] = ' ';
-        }
+        oled_display_string(0, 0, "PUZZEL 3");
+        oled_display_string(1, 0, "VOER CODE IN");
+        oled_display_string(2, 0, "# = ENTER");
+        oled_display_string(3, 0, "* = DELETE");
+    }
+    else
+    {
+        oled_display_string(0, 0, "PUZZLE 3");
+        oled_display_string(1, 0, "ENTER CODE");
+        oled_display_string(2, 0, "# = ENTER");
+        oled_display_string(3, 0, "* = DELETE");
     }
 
-    buffer1[pos] = '\0';
+    print_serial("\r\n========== PUZZLE 3: CODE ==========\r\n");
 
-    pos = 0;
-    for (int i = 4; i < HARD_SEQUENCE_VISIBLE_COUNT; i++)
+    if (is_dutch())
     {
-        int_to_string(hard_sequence[i], temp);
-
-        int j = 0;
-        while ((temp[j] != '\0') && (pos < 30))
-        {
-            buffer2[pos++] = temp[j++];
-        }
-
-        if (pos < 30)
-        {
-            buffer2[pos++] = ' ';
-        }
+        print_serial("Voer de code van de pagina's in.\r\n");
+        print_serial("Pagina nummers: ");
+        print_code_digits();
+        print_serial("\r\n");
+        print_serial("Code = 5745745\r\n");
+    }
+    else
+    {
+        print_serial("Enter the code from the pages.\r\n");
+        print_serial("Page numbers: ");
+        print_code_digits();
+        print_serial("\r\n");
+        print_serial("Code = 5745745\r\n");
     }
 
-    if (pos < 30)
+    print_serial("# = ENTER, * = DELETE\r\n");
+    print_serial("Input: ");
+}
+
+static void show_hard(void)
+{
+    oled_clear();
+
+    if (is_dutch())
     {
-        buffer2[pos++] = '?';
+        oled_display_string(0, 0, "PUZZEL 3");
+        oled_display_string(1, 0, "VOLGEND GETAL");
+        oled_display_string(2, 0, "5 7 4 5");
+        oled_display_string(3, 0, "7 4 5 ?");
+    }
+    else
+    {
+        oled_display_string(0, 0, "PUZZLE 3");
+        oled_display_string(1, 0, "NEXT NUMBER");
+        oled_display_string(2, 0, "5 7 4 5");
+        oled_display_string(3, 0, "7 4 5 ?");
     }
 
-    buffer2[pos] = '\0';
+    print_serial("\r\n========== PUZZLE 3: CODE ==========\r\n");
 
-    oled_display_string(2, 0, buffer1);
-    oled_display_string(3, 0, buffer2);
+    if (is_dutch())
+    {
+        print_serial("Zoek het volgende getal in de reeks.\r\n");
+    }
+    else
+    {
+        print_serial("Find the next number in the sequence.\r\n");
+    }
+
+    print_serial("Sequence: 5 7 4 5 7 4 5 ?\r\n");
+    print_serial("Pattern: +2, -3, +1, +2, -3, +1\r\n");
+    print_serial("Debug answer: 7\r\n");
+    print_serial("# = ENTER, * = DELETE\r\n");
+    print_serial("Input: ");
+}
+
+static void solved(void)
+{
+    if (is_dutch())
+    {
+        print_serial("\r\nCORRECT!\r\n");
+        print_serial("Puzzel 3 opgelost.\r\n");
+
+        oled_clear();
+        oled_display_string(0, 0, "PUZZEL 3 KLAAR");
+    }
+    else
+    {
+        print_serial("\r\nCORRECT!\r\n");
+        print_serial("Puzzle 3 solved.\r\n");
+
+        oled_clear();
+        oled_display_string(0, 0, "PUZZLE 3 SOLVED");
+    }
+
+    status = PUZZLE_STATUS_SOLVED;
+}
+
+static void wrong(void)
+{
+    if (is_dutch())
+    {
+        print_serial("\r\nFOUT!\r\n");
+        print_serial("Probeer opnieuw.\r\n");
+    }
+    else
+    {
+        print_serial("\r\nWRONG!\r\n");
+        print_serial("Try again.\r\n");
+    }
+
+    reset_input();
+    print_serial("Input: ");
 }
 
 void puzzle3_code_start(void)
@@ -284,76 +217,14 @@ void puzzle3_code_start(void)
     reset_input();
     status = PUZZLE_STATUS_RUNNING;
 
-    random_init();
-
-    oled_clear();
-
-    print_serial("\r\n========== PUZZLE 3: CODE ==========\r\n");
-
-    print_serial("Difficulty: ");
-    print_serial(app_settings_difficulty_to_string(app_settings_get_difficulty()));
-    print_serial("\r\n");
-
-    print_serial("Language: ");
-    print_serial(app_settings_language_to_string(app_settings_get_language()));
-    print_serial("\r\n");
-
     if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
     {
-        generate_hard_sequence();
-
-        if (is_dutch())
-        {
-            oled_display_string(0, 0, "PUZZEL 3");
-            oled_display_string(1, 0, "Volgend nummer");
-
-            print_serial("Vind het volgende nummer in de reeks.\r\n");
-            print_serial("Reeks: ");
-            print_hard_sequence();
-            print_serial(", ?\r\n");
-            print_serial("Voer het volgende nummer in en druk #.\r\n");
-        }
-        else
-        {
-            oled_display_string(0, 0, "PUZZLE 3");
-            oled_display_string(1, 0, "Next number");
-
-            print_serial("Find the next number in the sequence.\r\n");
-            print_serial("Sequence: ");
-            print_hard_sequence();
-            print_serial(", ?\r\n");
-            print_serial("Enter the next number and press #.\r\n");
-        }
-
-        show_hard_sequence_oled();
-
-        print_serial("Debug answer: ");
-        print_int(hard_answer);
-        print_serial("\r\n");
+        show_hard();
     }
     else
     {
-        generate_easy_code();
-
-        if (is_dutch())
-        {
-            oled_display_string(0, 0, "PUZZEL 3");
-            oled_display_string(1, 0, "Voer code in");
-        }
-        else
-        {
-            oled_display_string(0, 0, "PUZZLE 3");
-            oled_display_string(1, 0, "Enter code");
-        }
-
-        print_serial(is_dutch() ? "Voer de code in.\r\n" : "Enter the code.\r\n");
-
-        print_serial("Debug code: ");
-        print_serial(easy_code);
-        print_serial("\r\n");
+        show_easy();
     }
-
-    print_serial("Input: ");
 }
 
 puzzle_status_t puzzle3_code_update(void)
@@ -363,6 +234,9 @@ puzzle_status_t puzzle3_code_update(void)
 
 void puzzle3_code_handle_key(char key)
 {
+    const char *answer;
+    uint8_t required_length;
+
     if (status == PUZZLE_STATUS_SOLVED)
     {
         return;
@@ -370,12 +244,19 @@ void puzzle3_code_handle_key(char key)
 
     if (key == '*')
     {
-        if (input_index > 0)
+        if (input_index > 0u)
         {
             input_index--;
-            user_input[input_index] = 0;
+            user_input[input_index] = '\0';
 
-            print_serial(is_dutch() ? "\r\nVerwijderd\r\nInput: " : "\r\nDeleted\r\nInput: ");
+            if (is_dutch())
+            {
+                print_serial("\r\nVerwijderd\r\nInput: ");
+            }
+            else
+            {
+                print_serial("\r\nDeleted\r\nInput: ");
+            }
         }
 
         return;
@@ -383,103 +264,38 @@ void puzzle3_code_handle_key(char key)
 
     if (key == '#')
     {
-        print_serial("\r\n");
-
         if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
         {
-            int answer = string_to_int(user_input);
-
-            if (answer == hard_answer)
-            {
-                if (is_dutch())
-                {
-                    print_serial("\r\nCORRECT!\r\n");
-                    print_serial("Puzzel 3 opgelost.\r\n");
-
-                    oled_clear();
-                    oled_display_string(0, 0, "PUZZEL 3 KLAAR");
-                }
-                else
-                {
-                    print_serial("\r\nCORRECT!\r\n");
-                    print_serial("Puzzle 3 solved.\r\n");
-
-                    oled_clear();
-                    oled_display_string(0, 0, "PUZZLE 3 SOLVED");
-                }
-
-                status = PUZZLE_STATUS_SOLVED;
-            }
-            else
-            {
-                if (is_dutch())
-                {
-                    print_serial("\r\nFOUT ANTWOORD!\r\n");
-                    print_serial("Probeer opnieuw.\r\n");
-                }
-                else
-                {
-                    print_serial("\r\nWRONG ANSWER!\r\n");
-                    print_serial("Try again.\r\n");
-                }
-
-                reset_input();
-                print_serial("Input: ");
-            }
-
-            return;
-        }
-
-        if (input_index != EASY_CODE_LENGTH)
-        {
-            if (is_dutch())
-            {
-                print_serial("\r\nCode moet 7 cijfers hebben.\r\nInput: ");
-            }
-            else
-            {
-                print_serial("\r\nCode must contain 7 digits.\r\nInput: ");
-            }
-
-            return;
-        }
-
-        if (easy_code_is_correct())
-        {
-            if (is_dutch())
-            {
-                print_serial("\r\nCORRECTE CODE!\r\n");
-                print_serial("Puzzel 3 opgelost.\r\n");
-
-                oled_clear();
-                oled_display_string(0, 0, "PUZZEL 3 KLAAR");
-            }
-            else
-            {
-                print_serial("\r\nCORRECT CODE!\r\n");
-                print_serial("Puzzle 3 solved.\r\n");
-
-                oled_clear();
-                oled_display_string(0, 0, "PUZZLE 3 SOLVED");
-            }
-
-            status = PUZZLE_STATUS_SOLVED;
+            answer = hard_answer;
+            required_length = 1u;
         }
         else
         {
+            answer = code_digits;
+            required_length = CODE_LENGTH;
+        }
+
+        if (input_index != required_length)
+        {
             if (is_dutch())
             {
-                print_serial("\r\nFOUTE CODE!\r\n");
-                print_serial("Probeer opnieuw.\r\n");
+                print_serial("\r\nVerkeerde lengte.\r\nInput: ");
             }
             else
             {
-                print_serial("\r\nWRONG CODE!\r\n");
-                print_serial("Try again.\r\n");
+                print_serial("\r\nWrong length.\r\nInput: ");
             }
 
-            reset_input();
-            print_serial("Input: ");
+            return;
+        }
+
+        if (strings_equal(user_input, answer))
+        {
+            solved();
+        }
+        else
+        {
+            wrong();
         }
 
         return;
@@ -495,7 +311,10 @@ void puzzle3_code_handle_key(char key)
         return;
     }
 
-    user_input[input_index++] = key;
+    user_input[input_index] = key;
+    input_index++;
+    user_input[input_index] = '\0';
+
     serial_putchar(key);
     serial_putchar(' ');
 }

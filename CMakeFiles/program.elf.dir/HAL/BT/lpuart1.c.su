@@ -1,0 +1,8 @@
+C:/Users/hp/.vscode/MoiBox/config/arch/arm/CMSIS/Core/Include/core_cm33.h:2358:22:__NVIC_EnableIRQ	16	static
+C:/Users/hp/.vscode/MoiBox/config/arch/arm/CMSIS/Core/Include/core_cm33.h:2449:22:__NVIC_ClearPendingIRQ	16	static
+C:/Users/hp/.vscode/MoiBox/config/arch/arm/CMSIS/Core/Include/core_cm33.h:2555:22:__NVIC_SetPriority	16	static
+C:/Users/hp/.vscode/MoiBox/HAL/BT/lpuart1.c:11:6:lpuart1_init	16	static
+C:/Users/hp/.vscode/MoiBox/HAL/BT/lpuart1.c:63:6:lpuart1_putchar	24	static
+C:/Users/hp/.vscode/MoiBox/HAL/BT/lpuart1.c:74:5:lpuart1_getchar	16	static
+C:/Users/hp/.vscode/MoiBox/HAL/BT/lpuart1.c:85:10:lpuart1_rxcnt	8	static
+C:/Users/hp/.vscode/MoiBox/HAL/BT/lpuart1.c:90:6:LPUART1_IRQHandler	16	static

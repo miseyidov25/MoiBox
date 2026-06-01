@@ -1,0 +1,4 @@
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle_handler.c:9:6:puzzle_handler_start	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle_handler.c:38:17:puzzle_handler_update	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle_handler.c:62:6:puzzle_handler_handle_key	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle_handler.c:83:6:puzzle_handler_handle_button	16	static

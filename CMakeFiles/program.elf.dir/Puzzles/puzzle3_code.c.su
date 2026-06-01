@@ -1,0 +1,12 @@
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:45:13:print_serial	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:53:12:is_dutch	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:58:13:reset_input	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:68:12:strings_equal	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:84:13:print_code_digits	16	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:97:13:show_easy	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:139:13:show_hard	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:176:13:solved	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:198:13:wrong	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:215:6:puzzle3_code_start	8	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:230:17:puzzle3_code_update	4	static
+C:/Users/hp/.vscode/MoiBox/Puzzles/puzzle3_code.c:235:6:puzzle3_code_handle_key	24	static

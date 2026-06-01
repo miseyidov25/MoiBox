@@ -1,0 +1,9 @@
+C:/Users/hp/.vscode/MoiBox/HAL/Input/buttons.c:44:13:configure_button_pin	16	static
+C:/Users/hp/.vscode/MoiBox/HAL/Input/buttons.c:53:17:read_pressed_mask	16	static
+C:/Users/hp/.vscode/MoiBox/HAL/Input/buttons.c:66:6:buttons_init	8	static
+C:/Users/hp/.vscode/MoiBox/HAL/Input/buttons.c:104:6:buttons_update	16	static
+C:/Users/hp/.vscode/MoiBox/HAL/Input/buttons.c:135:6:buttons_red_pressed	4	static
+C:/Users/hp/.vscode/MoiBox/HAL/Input/buttons.c:146:6:buttons_green_pressed	4	static
+C:/Users/hp/.vscode/MoiBox/HAL/Input/buttons.c:157:6:buttons_blue_pressed	4	static
+C:/Users/hp/.vscode/MoiBox/HAL/Input/buttons.c:168:6:buttons_yellow_pressed	4	static
+C:/Users/hp/.vscode/MoiBox/HAL/Input/buttons.c:179:6:buttons_is_pressed	4	static

@@ -450,7 +450,7 @@ void oled_display_string(uint8_t row, uint8_t col, const char *str)
     }
 
     /*
-     * Compatibility with your current project:
+     * Compatibility with current project:
      * row = text line 0..3
      * col = character-ish column
      */
