@@ -1,7 +1,0 @@
-C:/Users/hp/.vscode/MoiBox/HAL/Actuators/lock.c:31:13:lock_output_on	4	static
-C:/Users/hp/.vscode/MoiBox/HAL/Actuators/lock.c:36:13:lock_output_off	4	static
-C:/Users/hp/.vscode/MoiBox/HAL/Actuators/lock.c:41:6:lock_init	8	static
-C:/Users/hp/.vscode/MoiBox/HAL/Actuators/lock.c:76:6:lock_update	16	static
-C:/Users/hp/.vscode/MoiBox/HAL/Actuators/lock.c:90:6:lock_lock	8	static
-C:/Users/hp/.vscode/MoiBox/HAL/Actuators/lock.c:102:6:lock_unlock	8	static
-C:/Users/hp/.vscode/MoiBox/HAL/Actuators/lock.c:114:5:lock_is_unlocked	4	static

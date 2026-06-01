@@ -1,6 +1,0 @@
-C:/Users/hp/.vscode/MoiBox/HAL/BT/hc05.c:5:6:hc05_init	16	static
-C:/Users/hp/.vscode/MoiBox/HAL/BT/hc05.c:17:6:hc05_update	4	static
-C:/Users/hp/.vscode/MoiBox/HAL/BT/hc05.c:22:6:hc05_getchar	16	static
-C:/Users/hp/.vscode/MoiBox/HAL/BT/hc05.c:38:10:hc05_rxcnt	8	static
-C:/Users/hp/.vscode/MoiBox/HAL/BT/hc05.c:43:6:hc05_putchar	16	static
-C:/Users/hp/.vscode/MoiBox/HAL/BT/hc05.c:48:6:hc05_write_string	16	static

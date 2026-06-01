@@ -1,6 +1,0 @@
-C:/Users/hp/.vscode/MoiBox/HAL/Input/keypad.c:44:13:enable_port2_gpio2_clocks	4	static
-C:/Users/hp/.vscode/MoiBox/HAL/Input/keypad.c:71:13:set_all_columns_high	16	static
-C:/Users/hp/.vscode/MoiBox/HAL/Input/keypad.c:79:13:keypad_scan_now	32	static
-C:/Users/hp/.vscode/MoiBox/HAL/Input/keypad.c:119:6:keypad_init	24	static
-C:/Users/hp/.vscode/MoiBox/HAL/Input/keypad.c:164:6:keypad_update	16	static
-C:/Users/hp/.vscode/MoiBox/HAL/Input/keypad.c:176:6:keypad_getkey	24	static

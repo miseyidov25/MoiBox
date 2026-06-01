@@ -1,4 +1,0 @@
-C:/Users/hp/.vscode/MoiBox/fifo/fifo.c:4:6:f_init	24	static
-C:/Users/hp/.vscode/MoiBox/fifo/fifo.c:24:6:f_push	32	static
-C:/Users/hp/.vscode/MoiBox/fifo/fifo.c:49:6:f_pop	32	static
-C:/Users/hp/.vscode/MoiBox/fifo/fifo.c:74:10:f_cnt	16	static

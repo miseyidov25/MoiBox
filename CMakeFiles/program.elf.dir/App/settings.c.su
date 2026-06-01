@@ -1,7 +1,0 @@
-C:/Users/hp/.vscode/MoiBox/App/settings.c:6:6:app_settings_init	4	static
-C:/Users/hp/.vscode/MoiBox/App/settings.c:12:6:app_settings_set_difficulty	16	static
-C:/Users/hp/.vscode/MoiBox/App/settings.c:21:18:app_settings_get_difficulty	4	static
-C:/Users/hp/.vscode/MoiBox/App/settings.c:26:6:app_settings_set_language	16	static
-C:/Users/hp/.vscode/MoiBox/App/settings.c:35:16:app_settings_get_language	4	static
-C:/Users/hp/.vscode/MoiBox/App/settings.c:40:13:app_settings_difficulty_to_string	16	static
-C:/Users/hp/.vscode/MoiBox/App/settings.c:55:13:app_settings_language_to_string	16	static

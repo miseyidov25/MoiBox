@@ -1,3 +1,0 @@
-C:/Users/hp/.vscode/MoiBox/CMakeFiles/program.elf.dir
-C:/Users/hp/.vscode/MoiBox/CMakeFiles/edit_cache.dir
-C:/Users/hp/.vscode/MoiBox/CMakeFiles/rebuild_cache.dir
