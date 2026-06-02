@@ -5,18 +5,25 @@
 
 #include "serial.h"
 #include "HAL/Display/oled.h"
+#include "HAL/Audio/buzzer.h"
 
 #include <MCXA153.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define COLOR_RED     0u
 #define COLOR_GREEN   1u
 #define COLOR_BLUE    2u
 #define COLOR_YELLOW  3u
 
+#define WRONG_SHOW_MS 1000u
+
 static puzzle_status_t status = PUZZLE_STATUS_RUNNING;
 static uint8_t correct_button = COLOR_BLUE;
 static uint32_t random_seed = 1u;
+
+static bool wrong_message_active = false;
+static uint32_t wrong_message_until_ms = 0u;
 
 static void print_serial(const char *s)
 {
@@ -45,6 +52,11 @@ static void random_init(void)
 static int is_dutch(void)
 {
     return app_settings_get_language() == APP_LANGUAGE_DUTCH;
+}
+
+static int is_hard(void)
+{
+    return app_settings_get_difficulty() == APP_DIFFICULTY_HARD;
 }
 
 static void print_button_name(uint8_t button)
@@ -97,7 +109,10 @@ static void print_button_name(uint8_t button)
     }
 }
 
-static const char *clue_line1_english(uint8_t color)
+/*
+ * EASY clues: more obvious.
+ */
+static const char *easy_clue_line1_english(uint8_t color)
 {
     if (color == COLOR_RED)
     {
@@ -117,7 +132,7 @@ static const char *clue_line1_english(uint8_t color)
     return "Sun Lemon";
 }
 
-static const char *clue_line2_english(uint8_t color)
+static const char *easy_clue_line2_english(uint8_t color)
 {
     if (color == COLOR_RED)
     {
@@ -137,7 +152,7 @@ static const char *clue_line2_english(uint8_t color)
     return "Banana";
 }
 
-static const char *clue_line1_dutch(uint8_t color)
+static const char *easy_clue_line1_dutch(uint8_t color)
 {
     if (color == COLOR_RED)
     {
@@ -157,7 +172,7 @@ static const char *clue_line1_dutch(uint8_t color)
     return "Zon Citroen";
 }
 
-static const char *clue_line2_dutch(uint8_t color)
+static const char *easy_clue_line2_dutch(uint8_t color)
 {
     if (color == COLOR_RED)
     {
@@ -177,24 +192,128 @@ static const char *clue_line2_dutch(uint8_t color)
     return "Banaan";
 }
 
-static const char *get_clue_line1(void)
+/*
+ * HARD clues: less direct.
+ * The player still presses the color button matching the clue meaning.
+ */
+static const char *hard_clue_line1_english(uint8_t color)
 {
-    if (is_dutch())
+    if (color == COLOR_RED)
     {
-        return clue_line1_dutch(correct_button);
+        return "Heat Blood";
     }
 
-    return clue_line1_english(correct_button);
+    if (color == COLOR_GREEN)
+    {
+        return "Nature Life";
+    }
+
+    if (color == COLOR_BLUE)
+    {
+        return "Deep Cold";
+    }
+
+    return "Bright Gold";
+}
+
+static const char *hard_clue_line2_english(uint8_t color)
+{
+    if (color == COLOR_RED)
+    {
+        return "Stop Mars";
+    }
+
+    if (color == COLOR_GREEN)
+    {
+        return "Forest Go";
+    }
+
+    if (color == COLOR_BLUE)
+    {
+        return "Calm Water";
+    }
+
+    return "Warning Honey";
+}
+
+static const char *hard_clue_line1_dutch(uint8_t color)
+{
+    if (color == COLOR_RED)
+    {
+        return "Warm Bloed";
+    }
+
+    if (color == COLOR_GREEN)
+    {
+        return "Natuur Leven";
+    }
+
+    if (color == COLOR_BLUE)
+    {
+        return "Diep Koud";
+    }
+
+    return "Helder Goud";
+}
+
+static const char *hard_clue_line2_dutch(uint8_t color)
+{
+    if (color == COLOR_RED)
+    {
+        return "Stop Mars";
+    }
+
+    if (color == COLOR_GREEN)
+    {
+        return "Bos Ga";
+    }
+
+    if (color == COLOR_BLUE)
+    {
+        return "Rust Water";
+    }
+
+    return "Let Op Honing";
+}
+
+static const char *get_clue_line1(void)
+{
+    if (is_hard())
+    {
+        if (is_dutch())
+        {
+            return hard_clue_line1_dutch(correct_button);
+        }
+
+        return hard_clue_line1_english(correct_button);
+    }
+
+    if (is_dutch())
+    {
+        return easy_clue_line1_dutch(correct_button);
+    }
+
+    return easy_clue_line1_english(correct_button);
 }
 
 static const char *get_clue_line2(void)
 {
-    if (is_dutch())
+    if (is_hard())
     {
-        return clue_line2_dutch(correct_button);
+        if (is_dutch())
+        {
+            return hard_clue_line2_dutch(correct_button);
+        }
+
+        return hard_clue_line2_english(correct_button);
     }
 
-    return clue_line2_english(correct_button);
+    if (is_dutch())
+    {
+        return easy_clue_line2_dutch(correct_button);
+    }
+
+    return easy_clue_line2_english(correct_button);
 }
 
 static void show_clue_on_oled(void)
@@ -204,32 +323,65 @@ static void show_clue_on_oled(void)
     if (is_dutch())
     {
         oled_display_string(0, 0, "PUZZEL 5");
-        oled_display_string(1, 0, get_clue_line1());
-        oled_display_string(2, 0, get_clue_line2());
-        oled_display_string(3, 0, "Druk kleur");
+
+        if (is_hard())
+        {
+            oled_display_string(1, 0, "HARD");
+        }
+        else
+        {
+            oled_display_string(1, 0, "MAKKELIJK");
+        }
+
+        oled_display_string(2, 0, get_clue_line1());
+        oled_display_string(3, 0, get_clue_line2());
     }
     else
     {
         oled_display_string(0, 0, "PUZZLE 5");
-        oled_display_string(1, 0, get_clue_line1());
-        oled_display_string(2, 0, get_clue_line2());
-        oled_display_string(3, 0, "Press color");
+
+        if (is_hard())
+        {
+            oled_display_string(1, 0, "HARD");
+        }
+        else
+        {
+            oled_display_string(1, 0, "EASY");
+        }
+
+        oled_display_string(2, 0, get_clue_line1());
+        oled_display_string(3, 0, get_clue_line2());
     }
+}
+
+static void show_wrong_oled(void)
+{
+    oled_clear();
+
+    if (is_dutch())
+    {
+        oled_display_string(0, 0, "FOUTE KLEUR");
+        oled_display_string(1, 0, "PROBEER");
+        oled_display_string(2, 0, "OPNIEUW");
+    }
+    else
+    {
+        oled_display_string(0, 0, "WRONG COLOR");
+        oled_display_string(1, 0, "TRY AGAIN");
+    }
+
+    wrong_message_active = true;
+    wrong_message_until_ms = app_millis() + WRONG_SHOW_MS;
 }
 
 void puzzle5_color_start(void)
 {
     status = PUZZLE_STATUS_RUNNING;
+    wrong_message_active = false;
+    wrong_message_until_ms = 0u;
 
     random_init();
 
-    /*
-     * Random answer:
-     * 0 = red
-     * 1 = green
-     * 2 = blue
-     * 3 = yellow
-     */
     correct_button = (uint8_t)(random_next() % 4u);
 
     show_clue_on_oled();
@@ -246,12 +398,28 @@ void puzzle5_color_start(void)
 
     if (is_dutch())
     {
-        print_serial("Lees de woorden en druk de juiste kleur.\r\n");
+        if (is_hard())
+        {
+            print_serial("HARD: Lees de moeilijkere aanwijzingen en druk de juiste kleur.\r\n");
+        }
+        else
+        {
+            print_serial("EASY: Lees de woorden en druk de juiste kleur.\r\n");
+        }
+
         print_serial("Woorden: ");
     }
     else
     {
-        print_serial("Read clue words and press matching color.\r\n");
+        if (is_hard())
+        {
+            print_serial("HARD: Read the harder clue words and press matching color.\r\n");
+        }
+        else
+        {
+            print_serial("EASY: Read clue words and press matching color.\r\n");
+        }
+
         print_serial("Clue words: ");
     }
 
@@ -267,6 +435,12 @@ void puzzle5_color_start(void)
 
 puzzle_status_t puzzle5_color_update(void)
 {
+    if (wrong_message_active && (app_millis() >= wrong_message_until_ms))
+    {
+        wrong_message_active = false;
+        show_clue_on_oled();
+    }
+
     return status;
 }
 
@@ -275,6 +449,12 @@ void puzzle5_color_handle_button(uint8_t button)
     if (status == PUZZLE_STATUS_SOLVED)
     {
         return;
+    }
+
+    if (wrong_message_active)
+    {
+        wrong_message_active = false;
+        show_clue_on_oled();
     }
 
     print_serial(is_dutch() ? "Gedrukt: " : "Pressed: ");
@@ -302,6 +482,8 @@ void puzzle5_color_handle_button(uint8_t button)
     }
     else
     {
+        buzzer_error_sound();
+
         if (is_dutch())
         {
             print_serial("Foute kleur. Probeer opnieuw.\r\n");
@@ -311,6 +493,6 @@ void puzzle5_color_handle_button(uint8_t button)
             print_serial("Wrong color. Try again.\r\n");
         }
 
-        show_clue_on_oled();
+        show_wrong_oled();
     }
 }

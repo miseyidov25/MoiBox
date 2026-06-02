@@ -132,7 +132,6 @@
  * ROW3 -> P2_6
  * ROW4 -> P2_7
  *
- * P2_3 intentionally left free.
  */
 
 #define PIN_KEYPAD_COL1_PORT_NUMBER 2u
@@ -161,14 +160,14 @@
  * LOCK CONTROL
  * ============================================================
  *
- * P2_10 controls a MOSFET/transistor/relay module.
+ * P3_29 controls a MOSFET/transistor/relay module.
  *
  * The GPIO does NOT power the lock directly.
- * Lock opens when power is provided.
+ * GPIO HIGH = relay/MOSFET ON = external 5V goes to lock.
  */
 
-#define PIN_LOCK_PORT_NUMBER 2u
-#define PIN_LOCK_PIN         10u
+#define PIN_LOCK_PORT_NUMBER 3u
+#define PIN_LOCK_PIN         29u
 
 /*
  * ============================================================
@@ -276,18 +275,6 @@
 #define PIN_BUZZER_PORT_NUMBER 3u
 #define PIN_BUZZER_PIN         31u
 
-/*
- * ============================================================
- * FREE / RESERVED PINS IN THIS PLAN
- * ============================================================
- *
- * Known intentionally free:
- *
- * P2_3
- * P2_8
- * P2_9
- * P2_11
- */
 
 /*
  * ============================================================
@@ -322,7 +309,6 @@
  * P2_5  = keypad ROW2
  * P2_6  = keypad ROW3
  * P2_7  = keypad ROW4
- * P2_10 = lock control
  * P2_12 = RGB3 red
  * P2_13 = RGB3 green
  *
@@ -338,6 +324,7 @@
  * P3_14 = RGB2 green
  * P3_27 = OLED SCL
  * P3_28 = OLED SDA
+ * P3_29 = lock
  * P3_30 = normal yellow LED
  * P3_31 = buzzer
  */

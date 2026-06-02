@@ -1,6 +1,7 @@
 #include "HAL/Storage/logger.h"
 
 #include "FatFS/ff.h"
+#include "HAL/BT/hc05.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -11,6 +12,7 @@
 static FATFS filesystem;
 
 static bool logger_available = false;
+static bool live_hc05_enabled = false;
 
 static uint32_t last_ms = 0u;
 
@@ -69,16 +71,28 @@ static bool write_uint(FIL *file, uint32_t value)
     return write_text(file, text);
 }
 
+static void hc05_write_uint(uint32_t value)
+{
+    char text[12];
+
+    uint_to_string(value, text);
+    hc05_write_string(text);
+}
+
 static bool write_seconds_6_digits(FIL *file, uint32_t seconds)
 {
     uint32_t divider = 100000u;
     uint32_t digit;
+    char text[2];
+
+    text[1] = '\0';
 
     while (divider > 0u)
     {
         digit = seconds / divider;
+        text[0] = (char)('0' + digit);
 
-        if (!write_text(file, (const char []){ (char)('0' + digit), '\0' }))
+        if (!write_text(file, text))
         {
             return false;
         }
@@ -88,6 +102,26 @@ static bool write_seconds_6_digits(FIL *file, uint32_t seconds)
     }
 
     return true;
+}
+
+static void hc05_write_seconds_6_digits(uint32_t seconds)
+{
+    uint32_t divider = 100000u;
+    uint32_t digit;
+    char text[2];
+
+    text[1] = '\0';
+
+    while (divider > 0u)
+    {
+        digit = seconds / divider;
+        text[0] = (char)('0' + digit);
+
+        hc05_write_string(text);
+
+        seconds %= divider;
+        divider /= 10u;
+    }
 }
 
 static uint32_t run_time_seconds(uint32_t now_ms)
@@ -146,6 +180,83 @@ static bool write_prefix(FIL *file, uint32_t now_ms)
     return true;
 }
 
+static void hc05_write_prefix(uint32_t now_ms)
+{
+    hc05_write_string("[");
+    hc05_write_seconds_6_digits(run_time_seconds(now_ms));
+    hc05_write_string(" s] RUN ");
+    hc05_write_uint(run_number);
+    hc05_write_string(" | ");
+}
+
+static void hc05_stream_basic_line(const char *category, const char *message, uint32_t now_ms)
+{
+    if (!live_hc05_enabled)
+    {
+        return;
+    }
+
+    if (category == 0)
+    {
+        category = "LOG";
+    }
+
+    if (message == 0)
+    {
+        message = "";
+    }
+
+    hc05_write_prefix(now_ms);
+    hc05_write_string(category);
+    hc05_write_string(": ");
+    hc05_write_string(message);
+    hc05_write_string("\r\n");
+}
+
+static void hc05_stream_separator(const char *text, uint32_t now_ms)
+{
+    if (!live_hc05_enabled)
+    {
+        return;
+    }
+
+    hc05_write_prefix(now_ms);
+    hc05_write_string("RUN: ========== ");
+    hc05_write_string(text);
+    hc05_write_string(" ==========\r\n");
+}
+
+static void hc05_stream_timing_line(
+    const char *label,
+    uint8_t number,
+    const char *action,
+    uint32_t now_ms,
+    uint32_t duration_ms,
+    bool has_duration
+)
+{
+    if (!live_hc05_enabled)
+    {
+        return;
+    }
+
+    hc05_write_prefix(now_ms);
+    hc05_write_string(label);
+    hc05_write_string(" ");
+    hc05_write_uint((uint32_t)number);
+    hc05_write_string(" ");
+    hc05_write_string(action);
+
+    if (has_duration)
+    {
+        hc05_write_string(" after ");
+        hc05_write_uint(duration_ms / 1000u);
+        hc05_write_string(" s");
+    }
+
+    hc05_write_string("\r\n");
+}
+
 static void write_basic_line(const char *category, const char *message, uint32_t now_ms)
 {
     FIL file;
@@ -182,6 +293,8 @@ static void write_basic_line(const char *category, const char *message, uint32_t
     }
 
     close_log_file(&file);
+
+    hc05_stream_basic_line(category, message, now_ms);
 }
 
 static void write_separator(const char *text, uint32_t now_ms)
@@ -209,6 +322,8 @@ static void write_separator(const char *text, uint32_t now_ms)
     }
 
     close_log_file(&file);
+
+    hc05_stream_separator(text, now_ms);
 }
 
 static void write_timing_line(
@@ -264,6 +379,8 @@ static void write_timing_line(
     }
 
     close_log_file(&file);
+
+    hc05_stream_timing_line(label, number, action, now_ms, duration_ms, has_duration);
 }
 
 void logger_init(void)
@@ -271,6 +388,8 @@ void logger_init(void)
     FRESULT result;
 
     logger_available = false;
+    live_hc05_enabled = false;
+
     run_active = false;
     run_number = 0u;
     run_start_ms = 0u;
@@ -443,4 +562,73 @@ void logger_set_datetime(
     (void)second;
 
     logger_set_unix_time(0u, current_ms);
+}
+
+void logger_set_live_hc05(bool enabled)
+{
+    live_hc05_enabled = enabled;
+
+    if (enabled)
+    {
+        hc05_write_string("\r\n===== LIVE LOG ON =====\r\n");
+    }
+    else
+    {
+        hc05_write_string("\r\n===== LIVE LOG OFF =====\r\n");
+    }
+}
+
+bool logger_get_live_hc05(void)
+{
+    return live_hc05_enabled;
+}
+
+void logger_send_log_hc05(void)
+{
+    FIL file;
+    FRESULT result;
+    UINT bytes_read;
+    char buffer[65];
+
+    if (!logger_available)
+    {
+        hc05_write_string("\r\nLOG ERROR: SD logger unavailable\r\n");
+        return;
+    }
+
+    result = f_open(&file, LOG_FILE_NAME, FA_READ);
+
+    if (result != FR_OK)
+    {
+        hc05_write_string("\r\nLOG ERROR: cannot open MOIBOX.TXT\r\n");
+        return;
+    }
+
+    hc05_write_string("\r\n===== PAST LOG START =====\r\n");
+
+    do
+    {
+        bytes_read = 0u;
+
+        result = f_read(&file, buffer, 64u, &bytes_read);
+
+        if (result != FR_OK)
+        {
+            f_close(&file);
+            hc05_write_string("\r\nLOG ERROR: read failed\r\n");
+            return;
+        }
+
+        buffer[bytes_read] = '\0';
+
+        if (bytes_read > 0u)
+        {
+            hc05_write_string(buffer);
+        }
+
+    } while (bytes_read > 0u);
+
+    f_close(&file);
+
+    hc05_write_string("\r\n===== PAST LOG END =====\r\n");
 }

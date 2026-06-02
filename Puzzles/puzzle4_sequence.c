@@ -6,6 +6,7 @@
 #include "serial.h"
 #include "HAL/Display/oled.h"
 #include "HAL/Display/leds.h"
+#include "HAL/Audio/buzzer.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -18,20 +19,10 @@
 #define BUTTON_BLUE    2u
 #define BUTTON_YELLOW  3u
 
-/*
- * LED playback timing:
- *
- * Each sequence LED is ON for 1 second.
- * After the full sequence, wait 5 seconds.
- * Then repeat.
- */
 #define LED_ON_TIME_MS             1000u
 #define SEQUENCE_REPEAT_WAIT_MS    5000u
-
-/*
- * When player presses a button, show that button LED briefly.
- */
 #define BUTTON_FEEDBACK_MS         300u
+#define WRONG_SHOW_MS              1000u
 
 typedef enum
 {
@@ -50,6 +41,9 @@ static uint32_t next_playback_ms = 0u;
 
 static bool button_feedback_active = false;
 static uint32_t button_feedback_until_ms = 0u;
+
+static bool wrong_message_active = false;
+static uint32_t wrong_message_until_ms = 0u;
 
 static uint32_t random_seed = 1u;
 
@@ -98,10 +92,6 @@ static void generate_sequence(void)
         random_seed = 1u;
     }
 
-    /*
-     * Easy mode:
-     * Random order of the 4 different colors.
-     */
     if (app_settings_get_difficulty() == APP_DIFFICULTY_EASY)
     {
         sequence[0] = BUTTON_RED;
@@ -120,10 +110,6 @@ static void generate_sequence(void)
     }
     else
     {
-        /*
-         * Hard mode:
-         * 6 random colors, repeats allowed.
-         */
         for (uint8_t i = 0u; i < length; i++)
         {
             sequence[i] = random_button();
@@ -265,6 +251,25 @@ static void show_oled_info(void)
     }
 }
 
+static void show_wrong_oled(void)
+{
+    oled_clear();
+
+    if (is_dutch())
+    {
+        oled_display_string(0, 0, "FOUT!");
+        oled_display_string(1, 0, "OPNIEUW");
+    }
+    else
+    {
+        oled_display_string(0, 0, "WRONG!");
+        oled_display_string(1, 0, "TRY AGAIN");
+    }
+
+    wrong_message_active = true;
+    wrong_message_until_ms = app_millis() + WRONG_SHOW_MS;
+}
+
 static void playback_restart(void)
 {
     playback_state = PLAYBACK_LED_ON;
@@ -289,20 +294,24 @@ static void playback_update(void)
 
     now = app_millis();
 
-    /*
-     * Button feedback has priority over sequence playback.
-     * This makes the pressed button LED visibly light up.
-     */
+    if (wrong_message_active)
+    {
+        if (now >= wrong_message_until_ms)
+        {
+            wrong_message_active = false;
+            show_oled_info();
+            playback_restart();
+        }
+
+        return;
+    }
+
     if (button_feedback_active)
     {
         if (now >= button_feedback_until_ms)
         {
             button_feedback_active = false;
             leds_normal_all_off();
-
-            /*
-             * Resume sequence timing cleanly after feedback.
-             */
             next_playback_ms = now + 200u;
         }
 
@@ -343,6 +352,8 @@ void puzzle4_sequence_start(void)
 {
     status = PUZZLE_STATUS_RUNNING;
     input_index = 0u;
+    wrong_message_active = false;
+    wrong_message_until_ms = 0u;
 
     generate_sequence();
     playback_restart();
@@ -385,13 +396,15 @@ void puzzle4_sequence_handle_button(uint8_t button)
         return;
     }
 
+    if (wrong_message_active)
+    {
+        return;
+    }
+
     print_serial(is_dutch() ? "Gedrukt: " : "Pressed: ");
     print_button_name(button);
     print_serial("\r\n");
 
-    /*
-     * Show corresponding LED when button is pressed.
-     */
     start_button_feedback(button);
 
     if (button == sequence_value(input_index))
@@ -422,31 +435,21 @@ void puzzle4_sequence_handle_button(uint8_t button)
     }
     else
     {
+        buzzer_error_sound();
+
         if (is_dutch())
         {
             print_serial("Foute reeks. Opnieuw.\r\n");
-
-            oled_clear();
-            oled_display_string(0, 0, "Fout!");
-            oled_display_string(1, 0, "Opnieuw");
         }
         else
         {
             print_serial("Wrong sequence. Restart.\r\n");
-
-            oled_clear();
-            oled_display_string(0, 0, "Wrong!");
-            oled_display_string(1, 0, "Try again");
         }
 
         input_index = 0u;
-        show_oled_info();
+        button_feedback_active = false;
+        leds_normal_all_off();
 
-        /*
-         * Restart sequence after the short button LED feedback finishes.
-         */
-        playback_state = PLAYBACK_LED_ON;
-        playback_index = 0u;
-        next_playback_ms = app_millis() + BUTTON_FEEDBACK_MS + 500u;
+        show_wrong_oled();
     }
 }

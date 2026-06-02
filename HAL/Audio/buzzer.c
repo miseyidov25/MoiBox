@@ -20,12 +20,6 @@
 #define WORD_GAP_MS         (7u * DOT_MS)
 
 /*
- * Repeating reminder timing while puzzle is active.
- */
-#define REPEAT_ON_MS        700u
-#define REPEAT_OFF_MS       900u
-
-/*
  * Rough delay.
  * If sounds are too fast/slow, tune this.
  */
@@ -33,10 +27,6 @@
 
 static bool timed_beep_active = false;
 static uint32_t timed_beep_until_ms = 0u;
-
-static bool repeat_enabled = false;
-static bool repeat_beep_on = false;
-static uint32_t repeat_next_ms = 0u;
 
 static void delay_loop(volatile uint32_t count)
 {
@@ -59,10 +49,6 @@ void buzzer_init(void)
 {
     timed_beep_active = false;
     timed_beep_until_ms = 0u;
-
-    repeat_enabled = false;
-    repeat_beep_on = false;
-    repeat_next_ms = 0u;
 
     /*
      * Enable PORT3 and GPIO3.
@@ -94,31 +80,8 @@ void buzzer_init(void)
 void buzzer_update(uint32_t current_ms)
 {
     /*
-     * Non-blocking repeating reminder.
-     */
-    if (repeat_enabled)
-    {
-        if (current_ms >= repeat_next_ms)
-        {
-            if (repeat_beep_on)
-            {
-                buzzer_off();
-                repeat_beep_on = false;
-                repeat_next_ms = current_ms + REPEAT_OFF_MS;
-            }
-            else
-            {
-                buzzer_on();
-                repeat_beep_on = true;
-                repeat_next_ms = current_ms + REPEAT_ON_MS;
-            }
-        }
-
-        return;
-    }
-
-    /*
-     * Non-blocking timed beep.
+     * Only timed non-blocking beep.
+     * No repeating alarm/reminder anymore.
      */
     if (timed_beep_active && (current_ms >= timed_beep_until_ms))
     {
@@ -147,9 +110,6 @@ void buzzer_off(void)
 void buzzer_beep(uint32_t duration_ms)
 {
     extern volatile uint32_t ms;
-
-    repeat_enabled = false;
-    repeat_beep_on = false;
 
     timed_beep_active = true;
     timed_beep_until_ms = ms + duration_ms;
@@ -369,30 +329,35 @@ void buzzer_morse_string(const char *text)
     }
 }
 
+/*
+ * Small victory beeps after puzzle completion.
+ */
 void buzzer_success(void)
 {
     buzzer_repeat_stop();
 
-    buzzer_beep_blocking(80u);
-    delay_ms_blocking(80u);
+    buzzer_beep_blocking(70u);
+    delay_ms_blocking(70u);
 
-    buzzer_beep_blocking(80u);
-    delay_ms_blocking(80u);
+    buzzer_beep_blocking(70u);
+    delay_ms_blocking(70u);
 
-    buzzer_beep_blocking(220u);
+    buzzer_beep_blocking(170u);
 }
 
+/*
+ * Short incorrect beep.
+ */
 void buzzer_fail(void)
 {
-    buzzer_beep_blocking(300u);
-    delay_ms_blocking(120u);
+    buzzer_repeat_stop();
 
-    buzzer_beep_blocking(300u);
+    buzzer_beep_blocking(120u);
 }
 
 void buzzer_click(void)
 {
-    buzzer_beep_blocking(50u);
+    buzzer_beep_blocking(40u);
 }
 
 void buzzer_correct_sound(void)
@@ -405,23 +370,23 @@ void buzzer_error_sound(void)
     buzzer_fail();
 }
 
+/*
+ * Disabled on purpose.
+ *
+ * Before, this started a repeating beep as soon as a puzzle started.
+ * Now the buzzer only sounds for:
+ * - Morse code puzzle
+ * - short correct/victory beep
+ * - short incorrect beep
+ */
+
 void buzzer_repeat_start(void)
 {
-    extern volatile uint32_t ms;
-
-    timed_beep_active = false;
-
-    repeat_enabled = true;
-    repeat_beep_on = false;
-    repeat_next_ms = ms;
+    buzzer_repeat_stop();
 }
 
 void buzzer_repeat_stop(void)
 {
-    repeat_enabled = false;
-    repeat_beep_on = false;
-    repeat_next_ms = 0u;
-
     timed_beep_active = false;
     timed_beep_until_ms = 0u;
 

@@ -128,6 +128,17 @@ static void hc05_print_to_usb(const char *s)
     print_serial("\r\n");
 }
 
+static void oled_changed(const char *value)
+{
+    oled_clear();
+    oled_display_string(0, 0, "CHANGED");
+
+    if (value != 0)
+    {
+        oled_display_string(1, 0, value);
+    }
+}
+
 static uint32_t parse_uint32(const char *s, int *ok)
 {
     uint32_t value = 0u;
@@ -369,9 +380,7 @@ static void process_command_char(char ch, bool from_hc05)
     if (ch == 'E')
     {
         app_settings_set_difficulty(APP_DIFFICULTY_EASY);
-        oled_clear();
-        oled_display_string(0, 0, "CHANGED");
-        oled_display_string(1, 0, "EASY");
+        oled_changed("EASY");
 
         logger_log_settings(from_hc05 ? "HC05 difficulty EASY" : "USB difficulty EASY");
 
@@ -389,9 +398,7 @@ static void process_command_char(char ch, bool from_hc05)
     else if (ch == 'H')
     {
         app_settings_set_difficulty(APP_DIFFICULTY_HARD);
-        oled_clear();
-        oled_display_string(0, 0, "CHANGED");
-        oled_display_string(1, 0, "HARD");  
+        oled_changed("HARD");
 
         logger_log_settings(from_hc05 ? "HC05 difficulty HARD" : "USB difficulty HARD");
 
@@ -409,9 +416,7 @@ static void process_command_char(char ch, bool from_hc05)
     else if (ch == 'P')
     {
         app_settings_set_language(APP_LANGUAGE_ENGLISH);
-        oled_clear();
-        oled_display_string(0, 0, "CHANGED");
-        oled_display_string(1, 0, "ENGLISH");
+        oled_changed("ENGLISH");
 
         logger_log_settings(from_hc05 ? "HC05 language ENGLISH" : "USB language ENGLISH");
 
@@ -429,9 +434,7 @@ static void process_command_char(char ch, bool from_hc05)
     else if (ch == 'D')
     {
         app_settings_set_language(APP_LANGUAGE_DUTCH);
-        oled_clear();
-        oled_display_string(0, 0, "CHANGED");
-        oled_display_string(1, 0, "DUTCH");
+        oled_changed("DUTCH");
 
         logger_log_settings(from_hc05 ? "HC05 language DUTCH" : "USB language DUTCH");
 
@@ -687,9 +690,7 @@ static void process_text_command(const char *cmd, bool from_hc05)
     else if (str_equal(cmd, "EASY") || str_equal(cmd, "E"))
     {
         app_settings_set_difficulty(APP_DIFFICULTY_EASY);
-        oled_clear();
-        oled_display_string(0, 0, "CHANGED");
-        oled_display_string(1, 0, "EASY");
+        oled_changed("EASY");
 
         if (from_hc05)
         {
@@ -708,9 +709,7 @@ static void process_text_command(const char *cmd, bool from_hc05)
     else if (str_equal(cmd, "HARD") || str_equal(cmd, "H"))
     {
         app_settings_set_difficulty(APP_DIFFICULTY_HARD);
-        oled_clear();
-        oled_display_string(0, 0, "CHANGED");
-        oled_display_string(1, 0, "HARD");
+        oled_changed("HARD");
 
         if (from_hc05)
         {
@@ -729,9 +728,7 @@ static void process_text_command(const char *cmd, bool from_hc05)
     else if (str_equal(cmd, "ENGLISH") || str_equal(cmd, "P"))
     {
         app_settings_set_language(APP_LANGUAGE_ENGLISH);
-        oled_clear();
-        oled_display_string(0, 0, "CHANGED");
-        oled_display_string(1, 0, "ENGLISH");
+        oled_changed("ENGLISH");
 
         if (from_hc05)
         {
@@ -750,9 +747,7 @@ static void process_text_command(const char *cmd, bool from_hc05)
     else if (str_equal(cmd, "DUTCH") || str_equal(cmd, "D"))
     {
         app_settings_set_language(APP_LANGUAGE_DUTCH);
-        oled_clear();
-        oled_display_string(0, 0, "CHANGED");
-        oled_display_string(1, 0, "DUTCH");
+        oled_changed("DUTCH");
 
         if (from_hc05)
         {
@@ -779,6 +774,52 @@ static void process_text_command(const char *cmd, bool from_hc05)
 
         print_current_settings();
         logger_log_settings(from_hc05 ? "HC05 status requested" : "USB status requested");
+    }
+    else if (str_equal(cmd, "LOGSTART"))
+    {
+        if (from_hc05)
+        {
+            hc05_print_to_usb("CMD LOGSTART");
+            hc05_write_string("OK LOGSTART\r\n");
+
+            logger_send_log_hc05();
+            logger_set_live_hc05(true);
+        }
+        else
+        {
+            print_serial("USB: CMD LOGSTART\r\n");
+            print_serial("LOGSTART is for HC05/app output.\r\n");
+        }
+    }
+    else if (str_equal(cmd, "GETLOG") || str_equal(cmd, "LOG"))
+    {
+        if (from_hc05)
+        {
+            hc05_print_to_usb("CMD GETLOG");
+            hc05_write_string("OK GETLOG\r\n");
+
+            logger_send_log_hc05();
+        }
+        else
+        {
+            print_serial("USB: CMD GETLOG\r\n");
+            print_serial("GETLOG is for HC05/app output.\r\n");
+        }
+    }
+    else if (str_equal(cmd, "LOGSTOP"))
+    {
+        if (from_hc05)
+        {
+            hc05_print_to_usb("CMD LOGSTOP");
+            hc05_write_string("OK LOGSTOP\r\n");
+
+            logger_set_live_hc05(false);
+        }
+        else
+        {
+            print_serial("USB: CMD LOGSTOP\r\n");
+            print_serial("LOGSTOP is for HC05/app output.\r\n");
+        }
     }
     else
     {

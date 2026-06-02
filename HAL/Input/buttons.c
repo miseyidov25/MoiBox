@@ -6,18 +6,23 @@
 #include <stdint.h>
 
 /*
- * Colored button pin mapping from OLED/input branch:
+ * Colored button pin mapping:
  *
  * YELLOW -> P1_6
  * BLUE   -> P1_7
  * GREEN  -> P1_8
  * RED    -> P1_9
  *
- * Buttons are assumed active-low:
+ * Buttons are active-low:
  * - Not pressed = HIGH
  * - Pressed     = LOW
  *
- * Each button should connect GPIO pin to GND when pressed.
+ * Each button connects GPIO pin to GND when pressed.
+ *
+ * Behavior:
+ * - Holding a button gives only ONE press event.
+ * - To get another press, the button must be released first,
+ *   then pressed again.
  */
 
 #define BUTTON_YELLOW_PIN  6u
@@ -34,7 +39,18 @@
 
 #define BUTTON_ACTIVE_LOW  1
 
-static uint32_t previous_pressed_mask = 0u;
+/*
+ * Number of consecutive identical readings needed before accepting
+ * the new button state.
+ *
+ * If buttons feel too slow, lower this to 3.
+ * If buttons still bounce, raise it to 8 or 10.
+ */
+#define BUTTON_DEBOUNCE_COUNT 5u
+
+static uint32_t last_raw_pressed_mask = 0u;
+static uint32_t debounced_pressed_mask = 0u;
+static uint8_t stable_count = 0u;
 
 static bool red_pending = false;
 static bool green_pending = false;
@@ -63,15 +79,31 @@ static uint32_t read_pressed_mask(void)
 #endif
 }
 
+static void queue_new_presses(uint32_t new_press_mask)
+{
+    if ((new_press_mask & BUTTON_RED_MASK) != 0u)
+    {
+        red_pending = true;
+    }
+
+    if ((new_press_mask & BUTTON_GREEN_MASK) != 0u)
+    {
+        green_pending = true;
+    }
+
+    if ((new_press_mask & BUTTON_BLUE_MASK) != 0u)
+    {
+        blue_pending = true;
+    }
+
+    if ((new_press_mask & BUTTON_YELLOW_MASK) != 0u)
+    {
+        yellow_pending = true;
+    }
+}
+
 void buttons_init(void)
 {
-    previous_pressed_mask = 0u;
-
-    red_pending = false;
-    green_pending = false;
-    blue_pending = false;
-    yellow_pending = false;
-
     /*
      * Enable PORT1 and GPIO1 clocks.
      */
@@ -99,37 +131,51 @@ void buttons_init(void)
      * Direction input = 0.
      */
     GPIO1->PDDR &= ~BUTTON_ALL_MASK;
+
+    red_pending = false;
+    green_pending = false;
+    blue_pending = false;
+    yellow_pending = false;
+
+    last_raw_pressed_mask = read_pressed_mask();
+    debounced_pressed_mask = last_raw_pressed_mask;
+    stable_count = 0u;
 }
 
 void buttons_update(void)
 {
-    uint32_t pressed_mask;
+    uint32_t raw_pressed_mask;
     uint32_t new_press_mask;
 
-    pressed_mask = read_pressed_mask();
-    new_press_mask = pressed_mask & (~previous_pressed_mask);
+    raw_pressed_mask = read_pressed_mask();
 
-    if ((new_press_mask & BUTTON_RED_MASK) != 0u)
+    if (raw_pressed_mask == last_raw_pressed_mask)
     {
-        red_pending = true;
+        if (stable_count < BUTTON_DEBOUNCE_COUNT)
+        {
+            stable_count++;
+        }
+    }
+    else
+    {
+        last_raw_pressed_mask = raw_pressed_mask;
+        stable_count = 0u;
+        return;
     }
 
-    if ((new_press_mask & BUTTON_GREEN_MASK) != 0u)
+    if (stable_count < BUTTON_DEBOUNCE_COUNT)
     {
-        green_pending = true;
+        return;
     }
 
-    if ((new_press_mask & BUTTON_BLUE_MASK) != 0u)
-    {
-        blue_pending = true;
-    }
+    new_press_mask = raw_pressed_mask & (~debounced_pressed_mask);
 
-    if ((new_press_mask & BUTTON_YELLOW_MASK) != 0u)
-    {
-        yellow_pending = true;
-    }
+    debounced_pressed_mask = raw_pressed_mask;
 
-    previous_pressed_mask = pressed_mask;
+    if (new_press_mask != 0u)
+    {
+        queue_new_presses(new_press_mask);
+    }
 }
 
 bool buttons_red_pressed(void)
@@ -178,5 +224,5 @@ bool buttons_yellow_pressed(void)
 
 bool buttons_is_pressed(void)
 {
-    return red_pending || green_pending || blue_pending || yellow_pending;
+    return debounced_pressed_mask != 0u;
 }

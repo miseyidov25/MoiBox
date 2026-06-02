@@ -27,10 +27,10 @@
  * Common GND, active HIGH.
  *
  * Meaning:
- * RED      = not next location and not completed
- * YELLOW   = next location
- * GREEN    = completed location
- * BLINKING = current/target location
+ * GREEN    = already solved
+ * YELLOW   = go to this current puzzle/location
+ * RED      = not solved and not current
+ * BLINKING = currently detected/nearby location
  */
 
 /*
@@ -38,18 +38,15 @@
  * NORMAL COLORED LEDS
  * ============================================================
  *
- * These were moved because P3_8/P3_9 are now used by HM-10:
- *
- * HM-10 LPUART1 RX -> P3_8
- * HM-10 LPUART1 TX -> P3_9
- *
- * Normal LEDs now:
+ * Normal LEDs:
  *
  * Green  -> P3_6
  * Blue   -> P3_7
  * Yellow -> P3_30
  * Red    -> P1_12
  */
+
+#define LOCATION_BLINK_MS 3000u
 
 typedef struct
 {
@@ -105,6 +102,9 @@ static uint8_t active_puzzle_number = 1u;
 
 static uint32_t wrong_flash_until_ms = 0u;
 static uint8_t wrong_flash_puzzle_number = 0u;
+
+static uint32_t current_location_blink_until_ms = 0u;
+static uint8_t current_location_blink_number = 0u;
 
 static bool solved_copy[5] =
 {
@@ -234,28 +234,59 @@ static void normal_led_toggle(const normal_led_t *led)
     pin_toggle(led->gpio, led->pin);
 }
 
+static void show_base_color(uint8_t index)
+{
+    if (index >= 5u)
+    {
+        return;
+    }
+
+    if (solved_copy[index])
+    {
+        rgb_green(index);
+    }
+    else if (index == (active_puzzle_number - 1u))
+    {
+        rgb_yellow(index);
+    }
+    else
+    {
+        rgb_red(index);
+    }
+}
+
 static void show_normal_map(void)
 {
-    uint8_t current_index;
+    uint8_t blink_index;
+    bool blink_active = false;
 
     if ((active_puzzle_number < 1u) || (active_puzzle_number > 5u))
     {
         active_puzzle_number = 1u;
     }
 
-    current_index = active_puzzle_number - 1u;
+    if ((current_location_blink_until_ms != 0u) &&
+        (last_ms < current_location_blink_until_ms) &&
+        (current_location_blink_number >= 1u) &&
+        (current_location_blink_number <= 5u))
+    {
+        blink_active = true;
+        blink_index = current_location_blink_number - 1u;
+    }
+    else
+    {
+        current_location_blink_until_ms = 0u;
+        current_location_blink_number = 0u;
+        blink_index = 0u;
+    }
 
     for (uint8_t i = 0u; i < 5u; i++)
     {
-        if (solved_copy[i])
-        {
-            rgb_green(i);
-        }
-        else if (i == current_index)
+        if (blink_active && (i == blink_index))
         {
             if (blink_on)
             {
-                rgb_yellow(i);
+                show_base_color(i);
             }
             else
             {
@@ -264,7 +295,7 @@ static void show_normal_map(void)
         }
         else
         {
-            rgb_red(i);
+            show_base_color(i);
         }
     }
 }
@@ -301,6 +332,8 @@ void leds_init(void)
     active_puzzle_number = 1u;
     wrong_flash_until_ms = 0u;
     wrong_flash_puzzle_number = 0u;
+    current_location_blink_until_ms = 0u;
+    current_location_blink_number = 0u;
 
     for (uint8_t i = 0u; i < 5u; i++)
     {
@@ -321,9 +354,6 @@ void leds_init(void)
         rgb_red(i);
     }
 
-    /*
-     * Configure the 4 normal colored LEDs in the same file.
-     */
     configure_output(normal_red_led.gpio, normal_red_led.port, normal_red_led.pin);
     configure_output(normal_green_led.gpio, normal_green_led.port, normal_green_led.pin);
     configure_output(normal_blue_led.gpio, normal_blue_led.port, normal_blue_led.pin);
@@ -390,6 +420,17 @@ void leds_set_active_puzzle(uint8_t puzzle_number)
     {
         active_puzzle_number = puzzle_number;
     }
+}
+
+void leds_set_current_location_blink(uint8_t puzzle_number)
+{
+    if ((puzzle_number < 1u) || (puzzle_number > 5u))
+    {
+        return;
+    }
+
+    current_location_blink_number = puzzle_number;
+    current_location_blink_until_ms = last_ms + LOCATION_BLINK_MS;
 }
 
 void leds_set_wrong_location_flash(uint8_t puzzle_number)

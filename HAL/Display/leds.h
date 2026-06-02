@@ -18,6 +18,7 @@ void leds_update(uint32_t current_ms);
 void leds_update_map(uint8_t current_puzzle, const bool solved[5]);
 void leds_set_active_puzzle(uint8_t puzzle_number);
 void leds_set_wrong_location_flash(uint8_t puzzle_number);
+void leds_set_current_location_blink(uint8_t puzzle_number);
 
 /*
  * Normal colored LEDs.

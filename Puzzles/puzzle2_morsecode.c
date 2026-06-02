@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "Puzzles/puzzle2_morsecode.h"
 
@@ -19,6 +20,9 @@
 #define COLOR_BLUE    2u
 #define COLOR_YELLOW  3u
 
+#define WRONG_SHOW_MS       1000u
+#define AUTO_REPLAY_MS      5000u
+
 static puzzle_status_t status = PUZZLE_STATUS_RUNNING;
 static uint8_t clue_played = 0u;
 
@@ -31,6 +35,10 @@ static uint8_t input_index = 0u;
 
 static uint8_t correct_color = COLOR_RED;
 static uint32_t random_seed = 1u;
+
+static bool wrong_message_active = false;
+static uint32_t wrong_message_until_ms = 0u;
+static uint32_t next_auto_replay_ms = 0u;
 
 static const char *color_words_english[] =
 {
@@ -211,6 +219,11 @@ static int number_answer_correct(void)
     return 1;
 }
 
+static void set_next_replay(void)
+{
+    next_auto_replay_ms = app_millis() + AUTO_REPLAY_MS;
+}
+
 static void show_current_clue(void)
 {
     if (app_settings_get_difficulty() == APP_DIFFICULTY_EASY)
@@ -275,6 +288,66 @@ static void show_current_clue(void)
     }
 }
 
+static void show_wrong_color(void)
+{
+    oled_clear();
+
+    if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
+    {
+        oled_display_string(0, 0, "FOUTE KLEUR");
+        oled_display_string(1, 0, "PROBEER");
+        oled_display_string(2, 0, "OPNIEUW");
+    }
+    else
+    {
+        oled_display_string(0, 0, "WRONG COLOR");
+        oled_display_string(1, 0, "TRY AGAIN");
+    }
+
+    wrong_message_active = true;
+    wrong_message_until_ms = app_millis() + WRONG_SHOW_MS;
+}
+
+static void show_wrong_number(void)
+{
+    oled_clear();
+
+    if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
+    {
+        oled_display_string(0, 0, "VERKEERD");
+        oled_display_string(1, 0, "NUMMER");
+        oled_display_string(2, 0, "OPNIEUW");
+    }
+    else
+    {
+        oled_display_string(0, 0, "WRONG NUMBER");
+        oled_display_string(1, 0, "TRY AGAIN");
+    }
+
+    wrong_message_active = true;
+    wrong_message_until_ms = app_millis() + WRONG_SHOW_MS;
+}
+
+static void show_wrong_length(void)
+{
+    oled_clear();
+
+    if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
+    {
+        oled_display_string(0, 0, "3 CIJFERS");
+        oled_display_string(1, 0, "PROBEER");
+        oled_display_string(2, 0, "OPNIEUW");
+    }
+    else
+    {
+        oled_display_string(0, 0, "ENTER 3 DIGITS");
+        oled_display_string(1, 0, "TRY AGAIN");
+    }
+
+    wrong_message_active = true;
+    wrong_message_until_ms = app_millis() + WRONG_SHOW_MS;
+}
+
 static void play_current_clue(void)
 {
     if (app_settings_get_difficulty() == APP_DIFFICULTY_EASY)
@@ -285,12 +358,18 @@ static void play_current_clue(void)
     {
         buzzer_morse_string(number_code);
     }
+
+    set_next_replay();
 }
 
 void puzzle2_morsecode_start(void)
 {
     status = PUZZLE_STATUS_RUNNING;
     clue_played = 0u;
+    wrong_message_active = false;
+    wrong_message_until_ms = 0u;
+    next_auto_replay_ms = 0u;
+
     reset_input();
 
     random_init();
@@ -341,9 +420,27 @@ void puzzle2_morsecode_start(void)
 
 puzzle_status_t puzzle2_morsecode_update(void)
 {
+    if (status == PUZZLE_STATUS_SOLVED)
+    {
+        return status;
+    }
+
+    if (wrong_message_active && (app_millis() >= wrong_message_until_ms))
+    {
+        wrong_message_active = false;
+        show_current_clue();
+        set_next_replay();
+    }
+
     if (!clue_played)
     {
         clue_played = 1u;
+        play_current_clue();
+    }
+    else if (!wrong_message_active &&
+             (next_auto_replay_ms != 0u) &&
+             (app_millis() >= next_auto_replay_ms))
+    {
         play_current_clue();
     }
 
@@ -356,6 +453,14 @@ void puzzle2_morsecode_handle_key(char key)
     {
         return;
     }
+
+    if (wrong_message_active)
+    {
+        wrong_message_active = false;
+        show_current_clue();
+    }
+
+    set_next_replay();
 
     if (app_settings_get_difficulty() == APP_DIFFICULTY_EASY)
     {
@@ -380,6 +485,9 @@ void puzzle2_morsecode_handle_key(char key)
 
         if (input_index != NUMBER_CODE_LENGTH)
         {
+            buzzer_error_sound();
+            show_wrong_length();
+
             if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
             {
                 print_serial("\r\nVoer precies 3 cijfers in.\r\nInput: ");
@@ -389,6 +497,7 @@ void puzzle2_morsecode_handle_key(char key)
                 print_serial("\r\nEnter exactly 3 digits.\r\nInput: ");
             }
 
+            reset_input();
             return;
         }
 
@@ -411,21 +520,22 @@ void puzzle2_morsecode_handle_key(char key)
                 oled_display_string(0, 0, "PUZZLE 2 SOLVED");
             }
 
-            buzzer_success();
             status = PUZZLE_STATUS_SOLVED;
         }
         else
         {
+            buzzer_error_sound();
+            show_wrong_number();
+
             if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
             {
-                print_serial("Fout nummer. Probeer opnieuw.\r\n");
+                print_serial("Verkeerd nummer. Probeer opnieuw.\r\n");
             }
             else
             {
                 print_serial("Wrong number. Try again.\r\n");
             }
 
-            buzzer_fail();
             reset_input();
             print_serial("Input: ");
         }
@@ -483,6 +593,14 @@ void puzzle2_morsecode_handle_button(uint8_t button)
         return;
     }
 
+    if (wrong_message_active)
+    {
+        wrong_message_active = false;
+        show_current_clue();
+    }
+
+    set_next_replay();
+
     if (button == correct_color)
     {
         if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
@@ -500,22 +618,20 @@ void puzzle2_morsecode_handle_button(uint8_t button)
             oled_display_string(0, 0, "PUZZLE 2 SOLVED");
         }
 
-        buzzer_success();
         status = PUZZLE_STATUS_SOLVED;
     }
     else
     {
+        buzzer_error_sound();
+        show_wrong_color();
+
         if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
         {
-            print_serial("Foute kleur. Luister opnieuw.\r\n");
+            print_serial("Foute kleur. Probeer opnieuw.\r\n");
         }
         else
         {
-            print_serial("Wrong color. Listen again.\r\n");
+            print_serial("Wrong color. Try again.\r\n");
         }
-
-        buzzer_fail();
-        show_current_clue();
-        play_current_clue();
     }
 }

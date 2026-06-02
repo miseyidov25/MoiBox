@@ -35,4 +35,8 @@ void logger_set_datetime(
     uint32_t current_ms
 );
 
+void logger_send_log_hc05(void);
+void logger_set_live_hc05(bool enabled);
+bool logger_get_live_hc05(void);
+
 #endif

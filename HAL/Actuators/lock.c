@@ -6,15 +6,30 @@
 /*
  * LOCK CONTROL PIN
  *
- * This pin does NOT power the lock directly.
- * It controls a MOSFET/transistor/relay module.
+ * FRDM-MCXA153 pinout:
+ * P3_29 is shown on the Arduino header area.
+ *
+ * IMPORTANT:
+ * This GPIO pin does NOT output 5V.
+ * It outputs 3.3V logic HIGH.
+ *
+ * Use it to control:
+ * - relay module IN pin
+ * - MOSFET gate
+ * - transistor base through resistor
+ *
+ * External 5V supply powers the lock/solenoid.
  *
  * Example:
- * GPIO P2_10 -> MOSFET gate / relay IN
+ *
+ * P3_29 -> relay IN / MOSFET gate
+ * Relay/MOSFET switches external 5V to the lock
+ * Lock GND and board GND must be connected together
  */
-#define LOCK_GPIO GPIO2
-#define LOCK_PORT PORT2
-#define LOCK_PIN  10u
+
+#define LOCK_GPIO GPIO3
+#define LOCK_PORT PORT3
+#define LOCK_PIN  29u
 
 /*
  * Lock opens when powered.
@@ -30,41 +45,56 @@ static uint32_t pulse_end_ms = 0u;
 
 static void lock_output_on(void)
 {
+    /*
+     * GPIO HIGH.
+     * This should activate the relay/MOSFET/transistor.
+     * The external circuit then provides 5V to the lock.
+     */
     LOCK_GPIO->PSOR = (1u << LOCK_PIN);
 }
 
 static void lock_output_off(void)
 {
+    /*
+     * GPIO LOW.
+     * Relay/MOSFET/transistor off.
+     * Lock power removed.
+     */
     LOCK_GPIO->PCOR = (1u << LOCK_PIN);
 }
 
 void lock_init(void)
 {
     /*
-     * Enable PORT2 and GPIO2 clocks.
+     * Enable PORT3 and GPIO3 clocks.
+     *
+     * PORT3 is on MRCC_GLB_CC1.
+     * GPIO3 is also on MRCC_GLB_CC1.
      */
-    MRCC0->MRCC_GLB_CC0_SET =
-        MRCC_MRCC_GLB_CC0_PORT2(1);
-
     MRCC0->MRCC_GLB_CC1_SET =
-        MRCC_MRCC_GLB_CC1_GPIO2(1);
+        MRCC_MRCC_GLB_CC1_PORT3(1) |
+        MRCC_MRCC_GLB_CC1_GPIO3(1);
 
     /*
-     * Release PORT2 and GPIO2 from reset.
+     * Release PORT3 and GPIO3 from reset.
      */
-    MRCC0->MRCC_GLB_RST0_SET =
-        MRCC_MRCC_GLB_RST0_PORT2(1);
-
     MRCC0->MRCC_GLB_RST1_SET =
-        MRCC_MRCC_GLB_RST1_GPIO2(1);
+        MRCC_MRCC_GLB_RST1_PORT3(1) |
+        MRCC_MRCC_GLB_RST1_GPIO3(1);
 
     /*
-     * Configure lock control pin as GPIO output.
+     * Configure P3_29 as GPIO.
      */
     LOCK_PORT->PCR[LOCK_PIN] = PORT_PCR_MUX(0);
 
+    /*
+     * Start OFF before making it output, to avoid a short unwanted pulse.
+     */
     lock_output_off();
 
+    /*
+     * Set P3_29 as output.
+     */
     LOCK_GPIO->PDDR |= (1u << LOCK_PIN);
 
     unlocked = 0;
@@ -90,8 +120,9 @@ void lock_update(uint32_t current_ms)
 void lock_lock(void)
 {
     /*
-     * Turn power off.
-     * The lock physically locks mechanically.
+     * Turn control signal off.
+     * The relay/MOSFET turns off.
+     * The lock no longer receives 5V.
      */
     lock_output_off();
 
@@ -102,7 +133,8 @@ void lock_lock(void)
 void lock_unlock(void)
 {
     /*
-     * Give lock power briefly.
+     * Give the relay/MOSFET a HIGH control signal briefly.
+     * External 5V is then provided to the lock for 500 ms.
      */
     lock_output_on();
 

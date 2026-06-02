@@ -1,31 +1,18 @@
 #include "Puzzles/puzzle3_code.h"
 
 #include "App/settings.h"
+#include "App/app.h"
 
 #include "serial.h"
 #include "HAL/Display/oled.h"
+#include "HAL/Audio/buzzer.h"
+
+#include <stdint.h>
+#include <stdbool.h>
 
 #define CODE_LENGTH       7
 #define MAX_INPUT_LENGTH  8
-
-/*
- * One code/sequence for puzzle 3.
- *
- * 5 7 4 5 7 4 5
- *
- * Pattern:
- * +2, -3, +1, +2, -3, +1
- *
- * Easy mode:
- * Enter all page numbers as one code:
- * 5745745
- *
- * Hard mode:
- * Work out the next number:
- * 5, 7, 4, 5, 7, 4, 5, ?
- * Answer:
- * 7
- */
+#define WRONG_SHOW_MS     1000u
 
 static const char code_digits[CODE_LENGTH + 1] =
 {
@@ -41,6 +28,9 @@ static char user_input[MAX_INPUT_LENGTH + 1];
 static uint8_t input_index = 0u;
 
 static puzzle_status_t status = PUZZLE_STATUS_RUNNING;
+
+static bool wrong_message_active = false;
+static uint32_t wrong_message_until_ms = 0u;
 
 static void print_serial(const char *s)
 {
@@ -102,38 +92,16 @@ static void show_easy(void)
     {
         oled_display_string(0, 0, "PUZZEL 3");
         oled_display_string(1, 0, "VOER CODE IN");
-        oled_display_string(2, 0, "# = ENTER");
-        oled_display_string(3, 0, "* = DELETE");
+        oled_display_string(2, 0, "Input=");
+        oled_display_string(3, 0, user_input);
     }
     else
     {
         oled_display_string(0, 0, "PUZZLE 3");
         oled_display_string(1, 0, "ENTER CODE");
-        oled_display_string(2, 0, "# = ENTER");
-        oled_display_string(3, 0, "* = DELETE");
+        oled_display_string(2, 0, "Input=");
+        oled_display_string(3, 0, user_input);
     }
-
-    print_serial("\r\n========== PUZZLE 3: CODE ==========\r\n");
-
-    if (is_dutch())
-    {
-        print_serial("Voer de code van de pagina's in.\r\n");
-        print_serial("Pagina nummers: ");
-        print_code_digits();
-        print_serial("\r\n");
-        print_serial("Code = 5745745\r\n");
-    }
-    else
-    {
-        print_serial("Enter the code from the pages.\r\n");
-        print_serial("Page numbers: ");
-        print_code_digits();
-        print_serial("\r\n");
-        print_serial("Code = 5745745\r\n");
-    }
-
-    print_serial("# = ENTER, * = DELETE\r\n");
-    print_serial("Input: ");
 }
 
 static void show_hard(void)
@@ -144,31 +112,116 @@ static void show_hard(void)
     {
         oled_display_string(0, 0, "PUZZEL 3");
         oled_display_string(1, 0, "VOLGEND GETAL");
-        oled_display_string(2, 0, "5 7 4 5");
-        oled_display_string(3, 0, "7 4 5 ?");
+        oled_display_string(2, 0, "5 7 4 5 7 4 5 ?");
+        oled_display_string(3, 0, "Input=");
     }
     else
     {
         oled_display_string(0, 0, "PUZZLE 3");
         oled_display_string(1, 0, "NEXT NUMBER");
-        oled_display_string(2, 0, "5 7 4 5");
-        oled_display_string(3, 0, "7 4 5 ?");
+        oled_display_string(2, 0, "5 7 4 5 7 4 5 ?");
+        oled_display_string(3, 0, "Input=");
     }
 
-    print_serial("\r\n========== PUZZLE 3: CODE ==========\r\n");
+    /*
+     * If your OLED line is too short for the full sequence,
+     * use the shorter version below instead:
+     *
+     * oled_display_string(2, 0, "5 7 4 5");
+     * oled_display_string(3, 0, "In=");
+     */
+    oled_display_string(3, 6, user_input);
+}
 
-    if (is_dutch())
+static void show_puzzle_oled(void)
+{
+    if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
     {
-        print_serial("Zoek het volgende getal in de reeks.\r\n");
+        show_hard();
     }
     else
     {
-        print_serial("Find the next number in the sequence.\r\n");
+        show_easy();
+    }
+}
+
+static void show_wrong_answer(void)
+{
+    oled_clear();
+
+    if (is_dutch())
+    {
+        oled_display_string(0, 0, "FOUT");
+        oled_display_string(1, 0, "PROBEER");
+        oled_display_string(2, 0, "OPNIEUW");
+    }
+    else
+    {
+        oled_display_string(0, 0, "WRONG");
+        oled_display_string(1, 0, "TRY AGAIN");
     }
 
-    print_serial("Sequence: 5 7 4 5 7 4 5 ?\r\n");
-    print_serial("Pattern: +2, -3, +1, +2, -3, +1\r\n");
-    print_serial("Debug answer: 7\r\n");
+    wrong_message_active = true;
+    wrong_message_until_ms = app_millis() + WRONG_SHOW_MS;
+}
+
+static void show_wrong_length(void)
+{
+    oled_clear();
+
+    if (is_dutch())
+    {
+        oled_display_string(0, 0, "FOUTE LENGTE");
+        oled_display_string(1, 0, "PROBEER");
+        oled_display_string(2, 0, "OPNIEUW");
+    }
+    else
+    {
+        oled_display_string(0, 0, "WRONG LENGTH");
+        oled_display_string(1, 0, "TRY AGAIN");
+    }
+
+    wrong_message_active = true;
+    wrong_message_until_ms = app_millis() + WRONG_SHOW_MS;
+}
+
+static void print_start_serial(void)
+{
+    print_serial("\r\n========== PUZZLE 3: CODE ==========\r\n");
+
+    if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
+    {
+        if (is_dutch())
+        {
+            print_serial("Zoek het volgende getal in de reeks.\r\n");
+        }
+        else
+        {
+            print_serial("Find the next number in the sequence.\r\n");
+        }
+
+        print_serial("Sequence: 5 7 4 5 7 4 5 ?\r\n");
+        print_serial("Pattern: +2, -3, +1, +2, -3, +1\r\n");
+        print_serial("Debug answer: 7\r\n");
+    }
+    else
+    {
+        if (is_dutch())
+        {
+            print_serial("Voer de code van de pagina's in.\r\n");
+            print_serial("Pagina nummers: ");
+        }
+        else
+        {
+            print_serial("Enter the code from the pages.\r\n");
+            print_serial("Page numbers: ");
+        }
+
+        print_code_digits();
+        print_serial("\r\n");
+        print_serial("Code = 5745745\r\n");
+    }
+
     print_serial("# = ENTER, * = DELETE\r\n");
     print_serial("Input: ");
 }
@@ -197,6 +250,8 @@ static void solved(void)
 
 static void wrong(void)
 {
+    buzzer_error_sound();
+
     if (is_dutch())
     {
         print_serial("\r\nFOUT!\r\n");
@@ -209,6 +264,8 @@ static void wrong(void)
     }
 
     reset_input();
+    show_wrong_answer();
+
     print_serial("Input: ");
 }
 
@@ -216,19 +273,21 @@ void puzzle3_code_start(void)
 {
     reset_input();
     status = PUZZLE_STATUS_RUNNING;
+    wrong_message_active = false;
+    wrong_message_until_ms = 0u;
 
-    if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
-    {
-        show_hard();
-    }
-    else
-    {
-        show_easy();
-    }
+    show_puzzle_oled();
+    print_start_serial();
 }
 
 puzzle_status_t puzzle3_code_update(void)
 {
+    if (wrong_message_active && (app_millis() >= wrong_message_until_ms))
+    {
+        wrong_message_active = false;
+        show_puzzle_oled();
+    }
+
     return status;
 }
 
@@ -242,12 +301,20 @@ void puzzle3_code_handle_key(char key)
         return;
     }
 
+    if (wrong_message_active)
+    {
+        wrong_message_active = false;
+        show_puzzle_oled();
+    }
+
     if (key == '*')
     {
         if (input_index > 0u)
         {
             input_index--;
             user_input[input_index] = '\0';
+
+            show_puzzle_oled();
 
             if (is_dutch())
             {
@@ -277,6 +344,11 @@ void puzzle3_code_handle_key(char key)
 
         if (input_index != required_length)
         {
+            buzzer_error_sound();
+
+            reset_input();
+            show_wrong_length();
+
             if (is_dutch())
             {
                 print_serial("\r\nVerkeerde lengte.\r\nInput: ");
@@ -317,4 +389,6 @@ void puzzle3_code_handle_key(char key)
 
     serial_putchar(key);
     serial_putchar(' ');
+
+    show_puzzle_oled();
 }

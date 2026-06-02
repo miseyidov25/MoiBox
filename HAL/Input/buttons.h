@@ -2,6 +2,7 @@
 #define BUTTONS_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 void buttons_init(void);
 void buttons_update(void);

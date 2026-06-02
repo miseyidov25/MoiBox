@@ -5,11 +5,14 @@
 
 #include "serial.h"
 #include "HAL/Display/oled.h"
+#include "HAL/Audio/buzzer.h"
 
 #include <MCXA153.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define MAX_INPUT_LENGTH 8
+#define WRONG_SHOW_MS    1000u
 
 static puzzle_status_t status = PUZZLE_STATUS_RUNNING;
 
@@ -23,6 +26,9 @@ static char input[MAX_INPUT_LENGTH + 1];
 static int input_index = 0;
 
 static uint32_t random_seed = 1u;
+
+static bool wrong_message_active = false;
+static uint32_t wrong_message_until_ms = 0u;
 
 static void print_serial(const char *s)
 {
@@ -204,9 +210,11 @@ static void show_problem_oled(void)
 {
     char line1[32];
     char line2[32];
+    char line3[32];
 
     line1[0] = '\0';
     line2[0] = '\0';
+    line3[0] = '\0';
 
     oled_clear();
 
@@ -230,9 +238,20 @@ static void show_problem_oled(void)
         append_string(line2, "APPEL+APPEL=", 30u);
         append_int(line2, second_result, 30u);
 
+        append_string(line3, "BANAAN=", 30u);
+
+        if (input_index > 0)
+        {
+            append_string(line3, input, 30u);
+        }
+        else
+        {
+            append_string(line3, "?", 30u);
+        }
+
         oled_display_string(1, 0, line1);
         oled_display_string(2, 0, line2);
-        oled_display_string(3, 0, "BANAAN=?");
+        oled_display_string(3, 0, line3);
     }
     else
     {
@@ -254,10 +273,41 @@ static void show_problem_oled(void)
         append_string(line2, "APPLE+APPLE=", 30u);
         append_int(line2, second_result, 30u);
 
+        append_string(line3, "BANANA=", 30u);
+
+        if (input_index > 0)
+        {
+            append_string(line3, input, 30u);
+        }
+        else
+        {
+            append_string(line3, "?", 30u);
+        }
+
         oled_display_string(1, 0, line1);
         oled_display_string(2, 0, line2);
-        oled_display_string(3, 0, "BANANA=?");
+        oled_display_string(3, 0, line3);
     }
+}
+
+static void show_wrong_oled(void)
+{
+    oled_clear();
+
+    if (is_dutch())
+    {
+        oled_display_string(0, 0, "FOUT");
+        oled_display_string(1, 0, "PROBEER");
+        oled_display_string(2, 0, "OPNIEUW");
+    }
+    else
+    {
+        oled_display_string(0, 0, "WRONG ANSWER");
+        oled_display_string(1, 0, "TRY AGAIN");
+    }
+
+    wrong_message_active = true;
+    wrong_message_until_ms = app_millis() + WRONG_SHOW_MS;
 }
 
 static void print_problem_serial(void)
@@ -323,6 +373,8 @@ static void print_problem_serial(void)
 void puzzle1_math_start(void)
 {
     status = PUZZLE_STATUS_RUNNING;
+    wrong_message_active = false;
+    wrong_message_until_ms = 0u;
     reset_input();
 
     generate_problem();
@@ -343,6 +395,12 @@ void puzzle1_math_start(void)
 
 puzzle_status_t puzzle1_math_update(void)
 {
+    if (wrong_message_active && (app_millis() >= wrong_message_until_ms))
+    {
+        wrong_message_active = false;
+        show_problem_oled();
+    }
+
     return status;
 }
 
@@ -355,12 +413,20 @@ void puzzle1_math_handle_key(char key)
         return;
     }
 
+    if (wrong_message_active)
+    {
+        wrong_message_active = false;
+        show_problem_oled();
+    }
+
     if (key == '*')
     {
         if (input_index > 0)
         {
             input_index--;
             input[input_index] = 0;
+
+            show_problem_oled();
 
             if (is_dutch())
             {
@@ -402,6 +468,8 @@ void puzzle1_math_handle_key(char key)
         }
         else
         {
+            buzzer_error_sound();
+
             if (is_dutch())
             {
                 print_serial("Fout antwoord. Probeer opnieuw.\r\n");
@@ -412,6 +480,8 @@ void puzzle1_math_handle_key(char key)
             }
 
             reset_input();
+            show_wrong_oled();
+
             print_serial("Input: ");
         }
 
@@ -432,4 +502,6 @@ void puzzle1_math_handle_key(char key)
     input[input_index] = 0;
 
     serial_putchar(key);
+
+    show_problem_oled();
 }
