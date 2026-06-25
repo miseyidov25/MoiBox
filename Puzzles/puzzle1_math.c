@@ -255,7 +255,7 @@ static void show_problem_oled(void)
     }
     else
     {
-        oled_display_string(0, 0, "PUZZLE 1");
+        oled_display_string(0, 0, "PUZZLE: MATH");
 
         append_string(line1, "BANANA", 30u);
 
@@ -379,7 +379,7 @@ void puzzle1_math_start(void)
 
     generate_problem();
 
-    print_serial("\r\n========== PUZZLE 1: MATH ==========\r\n");
+    print_serial("\r\n========== PUZZLE: MATH ==========\r\n");
 
     print_serial("Difficulty: ");
     print_serial(app_settings_difficulty_to_string(app_settings_get_difficulty()));
@@ -451,17 +451,17 @@ void puzzle1_math_handle_key(char key)
         {
             if (is_dutch())
             {
-                print_serial("Correct! Puzzel 1 opgelost.\r\n");
+                print_serial("Correct! Puzzel: MATH opgelost.\r\n");
 
                 oled_clear();
-                oled_display_string(0, 0, "PUZZEL 1 KLAAR");
+                oled_display_string(0, 0, "PUZZLE: MATH KLAAR");
             }
             else
             {
-                print_serial("Correct! Puzzle 1 solved.\r\n");
+                print_serial("Correct! Puzzle: MATH solved.\r\n");
 
                 oled_clear();
-                oled_display_string(0, 0, "PUZZLE 1 SOLVED");
+                oled_display_string(0, 0, "PUZZLE: MATH SOLVED");
             }
 
             status = PUZZLE_STATUS_SOLVED;

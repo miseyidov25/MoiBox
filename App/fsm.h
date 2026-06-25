@@ -17,4 +17,12 @@ void fsm_set_puzzle_for_location(uint8_t location_number, puzzle_id_t puzzle);
 puzzle_id_t fsm_get_puzzle_for_location(uint8_t location_number);
 uint8_t fsm_get_current_location(void);
 
+void fsm_set_puzzle_order(
+    uint8_t p1,
+    uint8_t p2,
+    uint8_t p3,
+    uint8_t p4,
+    uint8_t p5
+);
+
 #endif

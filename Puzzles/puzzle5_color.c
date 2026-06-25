@@ -5,6 +5,7 @@
 
 #include "serial.h"
 #include "HAL/Display/oled.h"
+#include "HAL/Display/leds.h"
 #include "HAL/Audio/buzzer.h"
 
 #include <MCXA153.h>
@@ -322,7 +323,7 @@ static void show_clue_on_oled(void)
 
     if (is_dutch())
     {
-        oled_display_string(0, 0, "PUZZEL 5");
+        oled_display_string(0, 0, "PUZZLE: COLOR");
 
         if (is_hard())
         {
@@ -338,7 +339,7 @@ static void show_clue_on_oled(void)
     }
     else
     {
-        oled_display_string(0, 0, "PUZZLE 5");
+        oled_display_string(0, 0, "PUZZLE: COLOR");
 
         if (is_hard())
         {
@@ -380,13 +381,19 @@ void puzzle5_color_start(void)
     wrong_message_active = false;
     wrong_message_until_ms = 0u;
 
+    leds_normal_all_off();
+    leds_normal_red_on();
+    leds_normal_green_on();
+    leds_normal_blue_on();
+    leds_normal_yellow_on();
+
     random_init();
 
     correct_button = (uint8_t)(random_next() % 4u);
 
     show_clue_on_oled();
 
-    print_serial("\r\n========== PUZZLE 5: COLOR ==========\r\n");
+    print_serial("\r\n========== PUZZLE: COLOR ==========\r\n");
 
     print_serial("Difficulty: ");
     print_serial(app_settings_difficulty_to_string(app_settings_get_difficulty()));
@@ -468,16 +475,17 @@ void puzzle5_color_handle_button(uint8_t button)
             print_serial("Correcte kleur! Puzzel 5 opgelost.\r\n");
 
             oled_clear();
-            oled_display_string(0, 0, "PUZZEL 5 KLAAR");
+            oled_display_string(0, 0, "PUZZEL: COLOR KLAAR");
         }
         else
         {
-            print_serial("Correct color! Puzzle 5 solved.\r\n");
+            print_serial("Correct color! Puzzle: COLOR solved.\r\n");
 
             oled_clear();
-            oled_display_string(0, 0, "PUZZLE 5 SOLVED");
+            oled_display_string(0, 0, "PUZZLE: COLOR SOLVED");
         }
 
+        leds_normal_all_off();
         status = PUZZLE_STATUS_SOLVED;
     }
     else

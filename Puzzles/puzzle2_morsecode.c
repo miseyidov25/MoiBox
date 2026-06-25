@@ -8,6 +8,7 @@
 
 #include "serial.h"
 #include "HAL/Display/oled.h"
+#include "HAL/Display/leds.h"
 #include "HAL/Audio/buzzer.h"
 
 #include <MCXA153.h>
@@ -91,6 +92,14 @@ static void generate_random_number_code(void)
     number_code[1] = (char)('0' + (random_next() % 10u));
     number_code[2] = (char)('0' + (random_next() % 10u));
     number_code[3] = '\0';
+}
+static void turn_all_normal_leds_on(void)
+{
+    leds_normal_all_off();
+    leds_normal_red_on();
+    leds_normal_green_on();
+    leds_normal_blue_on();
+    leds_normal_yellow_on();
 }
 
 static const char *morse_for_char(char c)
@@ -236,14 +245,14 @@ static void show_current_clue(void)
 
         if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
         {
-            oled_display_string(0, 0, "PUZZEL 2");
+            oled_display_string(0, 0, "PUZZLE: MORSE");
             oled_display_string(1, 0, "Morse kleur");
             oled_display_string(2, 0, "Luister goed");
             oled_display_string(3, 0, "Druk kleur");
         }
         else
         {
-            oled_display_string(0, 0, "PUZZLE 2");
+            oled_display_string(0, 0, "PUZZLE: MORSE");
             oled_display_string(1, 0, "Morse color");
             oled_display_string(2, 0, "Listen carefully");
             oled_display_string(3, 0, "Press color");
@@ -265,14 +274,14 @@ static void show_current_clue(void)
 
         if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
         {
-            oled_display_string(0, 0, "PUZZEL 2");
+            oled_display_string(0, 0, "PUZZLE: MORSE");
             oled_display_string(1, 0, "Morse nummer");
             oled_display_string(2, 0, "Luister goed");
             oled_display_string(3, 0, "Voer in + #");
         }
         else
         {
-            oled_display_string(0, 0, "PUZZLE 2");
+            oled_display_string(0, 0, "PUZZLE: MORSE");
             oled_display_string(1, 0, "Morse number");
             oled_display_string(2, 0, "Listen carefully");
             oled_display_string(3, 0, "Enter + #");
@@ -370,13 +379,14 @@ void puzzle2_morsecode_start(void)
     wrong_message_until_ms = 0u;
     next_auto_replay_ms = 0u;
 
+    turn_all_normal_leds_on();
     reset_input();
 
     random_init();
     generate_random_color();
     generate_random_number_code();
 
-    print_serial("\r\n========== PUZZLE 2: MORSE ==========\r\n");
+    print_serial("\r\n========== PUZZLE: MORSE ==========\r\n");
 
     print_serial("Difficulty: ");
     print_serial(app_settings_difficulty_to_string(app_settings_get_difficulty()));
@@ -507,19 +517,20 @@ void puzzle2_morsecode_handle_key(char key)
         {
             if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
             {
-                print_serial("Correct Morse nummer! Puzzel 2 opgelost.\r\n");
+                print_serial("Correct Morse nummer! Puzzel: MORSE opgelost.\r\n");
 
                 oled_clear();
-                oled_display_string(0, 0, "PUZZEL 2 KLAAR");
+                oled_display_string(0, 0, "PUZZLE: MORSE KLAAR");
             }
             else
             {
-                print_serial("Correct Morse number! Puzzle 2 solved.\r\n");
+                print_serial("Correct Morse number! Puzzle: MORSE solved.\r\n");
 
                 oled_clear();
-                oled_display_string(0, 0, "PUZZLE 2 SOLVED");
+                oled_display_string(0, 0, "PUZZLE: MORSE SOLVED");
             }
 
+            leds_normal_all_off();
             status = PUZZLE_STATUS_SOLVED;
         }
         else
@@ -605,19 +616,20 @@ void puzzle2_morsecode_handle_button(uint8_t button)
     {
         if (app_settings_get_language() == APP_LANGUAGE_DUTCH)
         {
-            print_serial("Correcte kleur! Puzzel 2 opgelost.\r\n");
+            print_serial("Correcte kleur! Puzzel: MORSE opgelost.\r\n");
 
             oled_clear();
-            oled_display_string(0, 0, "PUZZEL 2 KLAAR");
+            oled_display_string(0, 0, "PUZZLE: MORSE KLAAR");
         }
         else
         {
-            print_serial("Correct color! Puzzle 2 solved.\r\n");
+            print_serial("Correct color! Puzzle: MORSE solved.\r\n");
 
             oled_clear();
-            oled_display_string(0, 0, "PUZZLE 2 SOLVED");
+            oled_display_string(0, 0, "PUZZLE: MORSE SOLVED");
         }
 
+        leds_normal_all_off();
         status = PUZZLE_STATUS_SOLVED;
     }
     else

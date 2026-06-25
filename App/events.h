@@ -21,7 +21,8 @@ typedef enum
     EVENT_BUTTON_YELLOW,
 
     EVENT_SKIP_REQUEST,
-    EVENT_RESET_REQUEST
+    EVENT_RESET_REQUEST,
+    EVENT_OPEN_REQUEST
 } app_event_type_t;
 
 typedef struct

@@ -18,7 +18,8 @@ static const char *eventEnumToText[] =
     "EVENT_BUTTON_YELLOW",
 
     "EVENT_SKIP_REQUEST",
-    "EVENT_RESET_REQUEST"
+    "EVENT_RESET_REQUEST",
+    "EVENT_OPEN_REQUEST"
 };
 
 #define NUM_EVENTS (sizeof(eventEnumToText) / sizeof(eventEnumToText[0]))

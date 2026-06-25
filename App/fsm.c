@@ -528,6 +528,20 @@ void fsm_handle_event(app_event_t event)
         logger_start_run();
         return;
     }
+    if (event.type == EVENT_OPEN_REQUEST)
+    {
+        print_serial("\r\nFSM: OPEN requested\r\n");
+
+        lock_unlock();
+
+        logger_log("FSM", "OPEN requested");
+
+        oled_clear();
+        oled_display_string(0, 0, "OPEN");
+        oled_display_string(1, 0, "LOCK");
+
+        return;
+    }
 
     if (pending_action != PENDING_NONE)
     {
@@ -691,5 +705,69 @@ puzzle_id_t fsm_get_puzzle_for_location(uint8_t location_number)
         return PUZZLE_COUNT;
     }
 
-    return puzzle_for_location[location_number - 1u]; 
+    return puzzle_for_location[location_number - 1u];
+}
+
+void fsm_set_puzzle_order(
+    uint8_t p1,
+    uint8_t p2,
+    uint8_t p3,
+    uint8_t p4,
+    uint8_t p5
+)
+{
+    uint8_t values[5];
+    bool used[5];
+    uint8_t i;
+    uint8_t value;
+
+    values[0] = p1;
+    values[1] = p2;
+    values[2] = p3;
+    values[3] = p4;
+    values[4] = p5;
+
+    for (i = 0u; i < 5u; i++)
+    {
+        used[i] = false;
+    }
+
+    for (i = 0u; i < 5u; i++)
+    {
+        value = values[i];
+
+        if ((value < 1u) || (value > 5u))
+        {
+            print_serial("\r\nFSM: Invalid puzzle order command.\r\n");
+            logger_log("FSM", "Invalid puzzle order command");
+            return;
+        }
+
+        if (used[value - 1u])
+        {
+            print_serial("\r\nFSM: Duplicate puzzle in order command.\r\n");
+            logger_log("FSM", "Duplicate puzzle in order command");
+            return;
+        }
+
+        used[value - 1u] = true;
+    }
+
+    puzzle_for_location[0] = (puzzle_id_t)(p1 - 1u);
+    puzzle_for_location[1] = (puzzle_id_t)(p2 - 1u);
+    puzzle_for_location[2] = (puzzle_id_t)(p3 - 1u);
+    puzzle_for_location[3] = (puzzle_id_t)(p4 - 1u);
+    puzzle_for_location[4] = (puzzle_id_t)(p5 - 1u);
+
+    sync_current_puzzle_from_location();
+
+    print_serial("\r\nFSM: Puzzle order changed to ");
+    print_uint(p1);
+    print_uint(p2);
+    print_uint(p3);
+    print_uint(p4);
+    print_uint(p5);
+    print_serial(".\r\n");
+
+    logger_log("FSM", "Puzzle order changed");
 }

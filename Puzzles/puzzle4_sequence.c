@@ -23,10 +23,12 @@
 #define SEQUENCE_REPEAT_WAIT_MS    5000u
 #define BUTTON_FEEDBACK_MS         300u
 #define WRONG_SHOW_MS              1000u
+#define LED_OFF_TIME_MS            250u
 
 typedef enum
 {
     PLAYBACK_LED_ON = 0,
+    PLAYBACK_LED_OFF,
     PLAYBACK_WAIT_REPEAT
 } playback_state_t;
 
@@ -78,7 +80,19 @@ static uint32_t random_next(void)
 
 static uint8_t random_button(void)
 {
-    return (uint8_t)((random_next() >> 16) % 4u);
+    uint8_t value = (uint8_t)((random_next() >> 16) % 3u);
+
+    if (value == 0u)
+    {
+        return BUTTON_GREEN;
+    }
+
+    if (value == 1u)
+    {
+        return BUTTON_BLUE;
+    }
+
+    return BUTTON_YELLOW;
 }
 
 static void generate_sequence(void)
@@ -94,18 +108,9 @@ static void generate_sequence(void)
 
     if (app_settings_get_difficulty() == APP_DIFFICULTY_EASY)
     {
-        sequence[0] = BUTTON_RED;
-        sequence[1] = BUTTON_GREEN;
-        sequence[2] = BUTTON_BLUE;
-        sequence[3] = BUTTON_YELLOW;
-
-        for (int i = 3; i > 0; i--)
+        for (uint8_t i = 0u; i < length; i++)
         {
-            uint8_t j = (uint8_t)(random_next() % ((uint32_t)i + 1u));
-            uint8_t temp = sequence[i];
-
-            sequence[i] = sequence[j];
-            sequence[j] = temp;
+            sequence[i] = random_button();
         }
     }
     else
@@ -121,7 +126,7 @@ static uint8_t sequence_value(uint8_t index)
 {
     if (index >= sequence_length())
     {
-        return BUTTON_RED;
+        return BUTTON_GREEN;
     }
 
     return sequence[index];
@@ -181,11 +186,7 @@ static void normal_led_on_for_button(uint8_t button)
 {
     leds_normal_all_off();
 
-    if (button == BUTTON_RED)
-    {
-        leds_normal_red_on();
-    }
-    else if (button == BUTTON_GREEN)
+    if (button == BUTTON_GREEN)
     {
         leds_normal_green_on();
     }
@@ -237,14 +238,14 @@ static void show_oled_info(void)
 
     if (is_dutch())
     {
-        oled_display_string(0, 0, "PUZZEL 4");
+        oled_display_string(0, 0, "PUZZEL: SEQUENCE");
         oled_display_string(1, 0, "Kijk naar LEDs");
         oled_display_string(2, 0, "Herhaal reeks");
         oled_display_string(3, 0, "Wacht = replay");
     }
     else
     {
-        oled_display_string(0, 0, "PUZZLE 4");
+        oled_display_string(0, 0, "PUZZLE: SEQUENCE");
         oled_display_string(1, 0, "Watch LEDs");
         oled_display_string(2, 0, "Repeat sequence");
         oled_display_string(3, 0, "Wait = replay");
@@ -329,7 +330,7 @@ static void playback_update(void)
         {
             normal_led_on_for_button(sequence_value(playback_index));
 
-            playback_index++;
+            playback_state = PLAYBACK_LED_OFF;
             next_playback_ms = now + LED_ON_TIME_MS;
         }
         else
@@ -339,6 +340,15 @@ static void playback_update(void)
             playback_state = PLAYBACK_WAIT_REPEAT;
             next_playback_ms = now + SEQUENCE_REPEAT_WAIT_MS;
         }
+    }
+    else if (playback_state == PLAYBACK_LED_OFF)
+    {
+        leds_normal_all_off();
+
+        playback_index++;
+
+        playback_state = PLAYBACK_LED_ON;
+        next_playback_ms = now + LED_OFF_TIME_MS;
     }
     else
     {
@@ -358,7 +368,7 @@ void puzzle4_sequence_start(void)
     generate_sequence();
     playback_restart();
 
-    print_serial("\r\n========== PUZZLE 4: SEQUENCE ==========\r\n");
+    print_serial("\r\n========== PUZZLE: SEQUENCE ==========\r\n");
 
     print_serial("Difficulty: ");
     print_serial(app_settings_difficulty_to_string(app_settings_get_difficulty()));
@@ -401,6 +411,11 @@ void puzzle4_sequence_handle_button(uint8_t button)
         return;
     }
 
+    if (button == BUTTON_RED)
+    {
+        return;
+    }
+
     print_serial(is_dutch() ? "Gedrukt: " : "Pressed: ");
     print_button_name(button);
     print_serial("\r\n");
@@ -424,10 +439,10 @@ void puzzle4_sequence_handle_button(uint8_t button)
             }
             else
             {
-                print_serial("Correct sequence! Puzzle 4 solved.\r\n");
+                print_serial("Correct sequence! Puzzle: SEQUENCE solved.\r\n");
 
                 oled_clear();
-                oled_display_string(0, 0, "PUZZLE 4 SOLVED");
+                oled_display_string(0, 0, "PUZZLE: SEQUENCE SOLVED");
             }
 
             status = PUZZLE_STATUS_SOLVED;

@@ -186,19 +186,13 @@ bool keypad_getkey(char *key)
     {
         for (uint32_t col = 0u; col < KEYPAD_NUM_COLS; col++)
         {
-            /*
-             * New key press only once.
-             */
             if (keypad_state[row][col] && !keypad_previous[row][col])
             {
                 keypad_previous[row][col] = true;
                 *key = keypad_map[row][col];
                 return true;
             }
-
-            /*
-             * Key released.
-             */
+            
             if (!keypad_state[row][col])
             {
                 keypad_previous[row][col] = false;

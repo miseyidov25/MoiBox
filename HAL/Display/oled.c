@@ -10,9 +10,6 @@
 #define OLED_CTRL_COMMAND  0x00
 #define OLED_CTRL_DATA     0x40
 
-/*
- * This driver is for the 256x64 4-bit grayscale OLED from the uploaded branch.
- */
 #define OLED_WIDTH         256U
 #define OLED_HEIGHT        64U
 #define OLED_BUFFER_SIZE   ((OLED_WIDTH * OLED_HEIGHT) / 2U)
@@ -316,6 +313,16 @@ static void oled_draw_string_centered(uint32_t y, const char *text, uint32_t sca
     oled_draw_string(x, y, text, scale);
 }
 
+static void oled_startup_delay(void)
+{
+    volatile uint32_t i;
+
+    for (i = 0u; i < 3000000u; i++)
+    {
+        __asm volatile ("nop");
+    }
+}
+
 void oled_draw_text(uint32_t x, uint32_t y, const char *text, uint32_t scale)
 {
     oled_draw_string(x, y, text, scale);
@@ -328,6 +335,8 @@ void oled_draw_text_centered(uint32_t y, const char *text, uint32_t scale)
 
 bool oled_init(void)
 {
+    oled_startup_delay();
+    
     if (!lpi2c_init())
     {
         s_oled_initialized = false;
@@ -342,9 +351,6 @@ bool oled_init(void)
         0x15, 0x00, 0x7F,
         0x75, 0x00, 0x3F,
 
-        /*
-         * OLED contrast.
-         */
         0x81, 0x55,
 
         0xA0, 0xC1,
@@ -449,11 +455,6 @@ void oled_display_string(uint8_t row, uint8_t col, const char *str)
         return;
     }
 
-    /*
-     * Compatibility with current project:
-     * row = text line 0..3
-     * col = character-ish column
-     */
     x = ((uint32_t)col) * 12U;
     y = ((uint32_t)row) * 16U;
 

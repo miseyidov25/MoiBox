@@ -141,10 +141,6 @@ void lpi2c_controller_init(void)
     MRCC0->MRCC_GLB_RST1_SET =
         MRCC_MRCC_GLB_RST1_PORT3(1);
 
-    /*
-     * ALT2, input buffer, open-drain, pull-up.
-     * Do NOT lock these pins, so they can still be changed during debugging.
-     */
     PORT3->PCR[27] =
         PORT_PCR_IBE(1) |
         PORT_PCR_MUX(2) |

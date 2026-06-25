@@ -90,14 +90,14 @@ static void show_easy(void)
 
     if (is_dutch())
     {
-        oled_display_string(0, 0, "PUZZEL 3");
+        oled_display_string(0, 0, "PUZZLE: CODE");
         oled_display_string(1, 0, "VOER CODE IN");
         oled_display_string(2, 0, "Input=");
         oled_display_string(3, 0, user_input);
     }
     else
     {
-        oled_display_string(0, 0, "PUZZLE 3");
+        oled_display_string(0, 0, "PUZZLE: CODE");
         oled_display_string(1, 0, "ENTER CODE");
         oled_display_string(2, 0, "Input=");
         oled_display_string(3, 0, user_input);
@@ -110,26 +110,19 @@ static void show_hard(void)
 
     if (is_dutch())
     {
-        oled_display_string(0, 0, "PUZZEL 3");
+        oled_display_string(0, 0, "PUZZLE: CODE");
         oled_display_string(1, 0, "VOLGEND GETAL");
         oled_display_string(2, 0, "5 7 4 5 7 4 5 ?");
         oled_display_string(3, 0, "Input=");
     }
     else
     {
-        oled_display_string(0, 0, "PUZZLE 3");
+        oled_display_string(0, 0, "PUZZLE: CODE");
         oled_display_string(1, 0, "NEXT NUMBER");
         oled_display_string(2, 0, "5 7 4 5 7 4 5 ?");
         oled_display_string(3, 0, "Input=");
     }
 
-    /*
-     * If your OLED line is too short for the full sequence,
-     * use the shorter version below instead:
-     *
-     * oled_display_string(2, 0, "5 7 4 5");
-     * oled_display_string(3, 0, "In=");
-     */
     oled_display_string(3, 6, user_input);
 }
 
@@ -187,7 +180,7 @@ static void show_wrong_length(void)
 
 static void print_start_serial(void)
 {
-    print_serial("\r\n========== PUZZLE 3: CODE ==========\r\n");
+    print_serial("\r\n========== PUZZLE: CODE ==========\r\n");
 
     if (app_settings_get_difficulty() == APP_DIFFICULTY_HARD)
     {
@@ -239,10 +232,10 @@ static void solved(void)
     else
     {
         print_serial("\r\nCORRECT!\r\n");
-        print_serial("Puzzle 3 solved.\r\n");
+        print_serial("Puzzle: CODE solved.\r\n");
 
         oled_clear();
-        oled_display_string(0, 0, "PUZZLE 3 SOLVED");
+        oled_display_string(0, 0, "PUZZLE: CODE SOLVED");
     }
 
     status = PUZZLE_STATUS_SOLVED;

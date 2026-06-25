@@ -10,19 +10,12 @@
  */
 #define BUZZER_PIN_MASK     (1u << 31u)
 
-/*
- * Morse timing.
- */
 #define DOT_MS              150u
 #define DASH_MS             (3u * DOT_MS)
 #define ELEMENT_GAP_MS      DOT_MS
 #define LETTER_GAP_MS       (3u * DOT_MS)
 #define WORD_GAP_MS         (7u * DOT_MS)
 
-/*
- * Rough delay.
- * If sounds are too fast/slow, tune this.
- */
 #define DELAY_CALIBRATION   6000u
 
 static bool timed_beep_active = false;
@@ -50,28 +43,16 @@ void buzzer_init(void)
     timed_beep_active = false;
     timed_beep_until_ms = 0u;
 
-    /*
-     * Enable PORT3 and GPIO3.
-     */
     MRCC0->MRCC_GLB_CC1_SET =
         MRCC_MRCC_GLB_CC1_PORT3(1) |
         MRCC_MRCC_GLB_CC1_GPIO3(1);
 
-    /*
-     * Release PORT3 and GPIO3 from reset.
-     */
     MRCC0->MRCC_GLB_RST1_SET =
         MRCC_MRCC_GLB_RST1_PORT3(1) |
         MRCC_MRCC_GLB_RST1_GPIO3(1);
 
-    /*
-     * Configure P3_31 as GPIO.
-     */
     PORT3->PCR[31] = PORT_PCR_MUX(0);
 
-    /*
-     * Set P3_31 as output.
-     */
     GPIO3->PDDR |= BUZZER_PIN_MASK;
 
     buzzer_off();
@@ -79,10 +60,6 @@ void buzzer_init(void)
 
 void buzzer_update(uint32_t current_ms)
 {
-    /*
-     * Only timed non-blocking beep.
-     * No repeating alarm/reminder anymore.
-     */
     if (timed_beep_active && (current_ms >= timed_beep_until_ms))
     {
         buzzer_off();
@@ -92,18 +69,11 @@ void buzzer_update(uint32_t current_ms)
 
 void buzzer_on(void)
 {
-    /*
-     * Active buzzer style:
-     * HIGH = sound.
-     */
     GPIO3->PSOR = BUZZER_PIN_MASK;
 }
 
 void buzzer_off(void)
 {
-    /*
-     * LOW = silent.
-     */
     GPIO3->PCOR = BUZZER_PIN_MASK;
 }
 
@@ -329,9 +299,6 @@ void buzzer_morse_string(const char *text)
     }
 }
 
-/*
- * Small victory beeps after puzzle completion.
- */
 void buzzer_success(void)
 {
     buzzer_repeat_stop();
@@ -344,10 +311,6 @@ void buzzer_success(void)
 
     buzzer_beep_blocking(170u);
 }
-
-/*
- * Short incorrect beep.
- */
 void buzzer_fail(void)
 {
     buzzer_repeat_stop();
@@ -369,16 +332,6 @@ void buzzer_error_sound(void)
 {
     buzzer_fail();
 }
-
-/*
- * Disabled on purpose.
- *
- * Before, this started a repeating beep as soon as a puzzle started.
- * Now the buzzer only sounds for:
- * - Morse code puzzle
- * - short correct/victory beep
- * - short incorrect beep
- */
 
 void buzzer_repeat_start(void)
 {

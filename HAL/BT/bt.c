@@ -44,7 +44,7 @@
  * #define BT_USE_HAN_TEST_BEACONS 0
  */
 
-#define BT_USE_HAN_TEST_BEACONS   1
+#define BT_USE_HAN_TEST_BEACONS   0
 
 #if BT_USE_HAN_TEST_BEACONS
 

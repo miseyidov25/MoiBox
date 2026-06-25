@@ -617,6 +617,100 @@ static void send_button_sequence(const char *cmd)
     }
 }
 
+static int process_order_command(const char *cmd, bool from_hc05)
+{
+    bool used[5];
+    uint8_t order[5];
+
+    if ((to_upper_char(cmd[0]) != 'O') ||
+        (to_upper_char(cmd[1]) != 'R') ||
+        (to_upper_char(cmd[2]) != 'D') ||
+        (to_upper_char(cmd[3]) != 'E') ||
+        (to_upper_char(cmd[4]) != 'R'))
+    {
+        return 0;
+    }
+
+    if (!is_digit(cmd[5]) ||
+        !is_digit(cmd[6]) ||
+        !is_digit(cmd[7]) ||
+        !is_digit(cmd[8]) ||
+        !is_digit(cmd[9]) ||
+        (cmd[10] != '\0'))
+    {
+        print_serial("ORDER: invalid format. Use ORDER12345\r\n");
+
+        if (from_hc05)
+        {
+            hc05_write_string("ERR ORDER FORMAT\r\n");
+        }
+
+        logger_log("SETTINGS", "Invalid puzzle order format");
+        return 1;
+    }
+
+    for (uint8_t i = 0u; i < 5u; i++)
+    {
+        used[i] = false;
+    }
+
+    for (uint8_t i = 0u; i < 5u; i++)
+    {
+        order[i] = (uint8_t)(cmd[5u + i] - '0');
+
+        if ((order[i] < 1u) || (order[i] > 5u))
+        {
+            print_serial("ORDER: values must be 1-5\r\n");
+
+            if (from_hc05)
+            {
+                hc05_write_string("ERR ORDER RANGE\r\n");
+            }
+
+            logger_log("SETTINGS", "Invalid puzzle order range");
+            return 1;
+        }
+
+        if (used[order[i] - 1u])
+        {
+            print_serial("ORDER: duplicate puzzle number\r\n");
+
+            if (from_hc05)
+            {
+                hc05_write_string("ERR ORDER DUPLICATE\r\n");
+            }
+
+            logger_log("SETTINGS", "Duplicate puzzle order");
+            return 1;
+        }
+
+        used[order[i] - 1u] = true;
+    }
+
+    fsm_set_puzzle_order(
+        order[0],
+        order[1],
+        order[2],
+        order[3],
+        order[4]
+    );
+
+    print_serial("ORDER: accepted\r\n");
+
+    if (from_hc05)
+    {
+        hc05_write_string("OK ORDER\r\n");
+    }
+
+    logger_log("SETTINGS", "Puzzle order changed");
+
+    oled_clear();
+    oled_display_string(0, 0, "PUZZLE ORDER");
+    oled_display_string(1, 0, "CHANGED");
+
+    return 1;
+}
+
 static void process_text_command(const char *cmd, bool from_hc05)
 {
     app_event_t event;
@@ -658,6 +752,8 @@ static void process_text_command(const char *cmd, bool from_hc05)
         {
             print_serial("USB: CMD START\r\n");
         }
+
+        event.type = EVENT_RESET_REQUEST;
     }
     else if (str_equal(cmd, "RESET"))
     {
@@ -672,6 +768,20 @@ static void process_text_command(const char *cmd, bool from_hc05)
         }
 
         event.type = EVENT_RESET_REQUEST;
+    }
+    else if (str_equal(cmd, "OPEN"))
+    {
+        if (from_hc05)
+        {
+            hc05_print_to_usb("CMD OPEN");
+            hc05_write_string("OK OPEN\r\n");
+        }
+        else
+        {
+            print_serial("USB: CMD OPEN\r\n");
+        }
+
+        event.type = EVENT_OPEN_REQUEST;
     }
     else if (str_equal(cmd, "SKIP"))
     {
@@ -774,6 +884,10 @@ static void process_text_command(const char *cmd, bool from_hc05)
 
         print_current_settings();
         logger_log_settings(from_hc05 ? "HC05 status requested" : "USB status requested");
+    }
+    else if (process_order_command(cmd, from_hc05))
+    {
+        return;
     }
     else if (str_equal(cmd, "LOGSTART"))
     {
